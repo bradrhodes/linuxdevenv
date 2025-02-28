@@ -1,0 +1,59 @@
+---
+- name: Create fonts directory
+  file:
+    path: "{{ home_dir }}/.fonts"
+    state: directory
+    mode: '0755'
+  tags: ["fonts"]
+
+- name: Check if Nerd Font zip already exists
+  stat:
+    path: "{{ home_dir }}/.fonts/{{ nerd_font }}.zip"
+  register: font_zip_stat
+  tags: ["fonts"]
+
+- name: Download Nerd Font
+  get_url:
+    url: "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.3.0/{{ nerd_font }}.zip"
+    dest: "{{ home_dir }}/.fonts/{{ nerd_font }}.zip"
+  when: 
+    - not font_zip_stat.stat.exists or font_zip_stat.stat.size == 0
+  tags: ["fonts"]
+  register: font_download
+
+- name: Check if font already extracted
+  find:
+    paths: "{{ home_dir }}/.fonts"
+    patterns: "*.ttf,*.otf"
+  register: font_files
+  tags: ["fonts"]
+
+- name: Unzip font files
+  unarchive:
+    src: "{{ home_dir }}/.fonts/{{ nerd_font }}.zip"
+    dest: "{{ home_dir }}/.fonts"
+    remote_src: yes
+  when: 
+    - font_download.changed or (font_zip_stat.stat.exists and font_files.matched == 0)
+    - not ansible_check_mode
+  tags: ["fonts"]
+  notify: Update font cache
+
+- name: Clean up font zip and readme files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ home_dir }}/.fonts/{{ nerd_font }}.zip"
+    - "{{ home_dir }}/.fonts/*.md"
+  ignore_errors: true
+  when: 
+    - not ansible_check_mode
+  tags: ["fonts"]
+
+- name: Font installation would be performed (check mode only)
+  debug:
+    msg: "In non-check mode, would download and install {{ nerd_font }} font"
+  when:
+    - ansible_check_mode
+  tags: ["fonts"]

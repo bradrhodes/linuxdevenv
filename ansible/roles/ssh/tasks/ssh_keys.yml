@@ -1,0 +1,57 @@
+---
+# Determine home directory with multiple fallback methods
+- name: Determine definitive home directory
+  set_fact:
+    effective_home_dir: >-
+      {{ 
+        lookup('env', 'HOME') | 
+        default(ansible_env.HOME, true) | 
+        default('/home/' + ansible_user_id, true) 
+      }}
+    ssh_key_type: "{{ ssh.key_type | default('ed25519') }}"
+  tags: ["ssh"]
+
+# Check if SSH key already exists
+- name: Check existing SSH key
+  stat:
+    path: "{{ effective_home_dir }}/.ssh/id_{{ ssh_key_type }}.pub"
+  register: existing_ssh_key
+  tags: ["ssh"]
+
+# Conditional SSH key generation with environment awareness
+- name: Generate SSH key with cross-platform considerations
+  openssh_keypair:
+    path: "{{ effective_home_dir }}/.ssh/id_{{ ssh_key_type }}"
+    type: "{{ ssh_key_type }}"
+    comment: "{{ ssh.key_email | default(ansible_user_id + '@' + ansible_hostname) }}"
+    passphrase: "{{ ssh.key_passphrase | default('', true) }}"
+    force: false
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+    mode: '0600'
+  become: yes
+  become_method: sudo
+  become_user: "{{ ansible_user_id }}"
+  when: ssh.generate_key | default(true) | bool and not existing_ssh_key.stat.exists
+  register: ssh_key_generation
+  tags: ["ssh"]
+
+# Start SSH agent
+- name: Start SSH agent
+  shell: |
+    eval "$(ssh-agent -s)"
+    {% if ssh.key_passphrase | length > 0 %}
+    echo "{{ ssh.key_passphrase }}" | SSH_ASKPASS=/bin/cat ssh-add {{ effective_home_dir }}/.ssh/id_{{ ssh_key_type }} < /dev/null
+    {% else %}
+    ssh-add {{ effective_home_dir }}/.ssh/id_{{ ssh_key_type }}
+    {% endif %}
+  args:
+    executable: /bin/bash
+  become: yes
+  become_method: sudo
+  become_user: "{{ ansible_user_id }}"
+  when: 
+    - ssh.generate_key | default(true) | bool
+    - existing_ssh_key.stat.exists or (ssh_key_generation.changed | default(false))
+  ignore_errors: yes
+  tags: ["ssh"]

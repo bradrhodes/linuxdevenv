@@ -1,0 +1,57 @@
+---
+- name: Check if chezmoi is installed
+  command: which chezmoi
+  register: chezmoi_check
+  ignore_errors: true
+  changed_when: false
+  tags: ["chezmoi", "dotfiles"]
+
+- name: Initialize chezmoi with repository
+  command: >
+    chezmoi init 
+    {% if dotfiles.branch is defined and dotfiles.branch | length > 0 %}--branch {{ dotfiles.branch }}{% endif %}
+    {{ dotfiles.repo }}
+  args:
+    creates: "{{ home_dir }}/.local/share/chezmoi/.git"
+  register: chezmoi_init
+  when: 
+    - dotfiles.repo is defined 
+    - dotfiles.repo | length > 0
+    - chezmoi_check.rc == 0
+  tags: ["chezmoi", "dotfiles"]
+          
+- name: Apply dotfiles with chezmoi
+  command: chezmoi apply
+  when: 
+    - dotfiles.repo is defined
+    - dotfiles.repo | length > 0
+    - dotfiles.apply | bool
+    - chezmoi_init is defined
+    - chezmoi_init.changed
+    - chezmoi_check.rc == 0
+  tags: ["chezmoi", "dotfiles"]
+          
+- name: Report chezmoi initialization status
+  debug:
+    msg: "Dotfiles successfully initialized with chezmoi from {{ dotfiles.repo }}"
+  when: 
+    - dotfiles.repo is defined
+    - dotfiles.repo | length > 0
+    - chezmoi_init is defined
+    - chezmoi_init.changed
+    - chezmoi_check.rc == 0
+  tags: ["chezmoi", "dotfiles"]
+          
+- name: Report no dotfiles repository configured
+  debug:
+    msg: "No dotfiles repository configured, skipping dotfiles setup"
+  when: 
+    - dotfiles.repo is not defined or dotfiles.repo | length == 0
+    - chezmoi_check.rc == 0
+  tags: ["chezmoi", "dotfiles"]
+
+- name: Report chezmoi not installed
+  debug:
+    msg: "Chezmoi is not installed, skipping dotfiles setup. Install chezmoi first to use dotfiles."
+  when: chezmoi_check.rc != 0
+  tags: ["chezmoi", "dotfiles"]

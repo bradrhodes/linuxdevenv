@@ -1,0 +1,32 @@
+---
+- name: Set Git user name
+  git_config:
+    name: user.name
+    scope: global
+    value: "{{ git_user.name }}"
+  when: git_user.name | length > 0
+  tags: ["git"]
+          
+- name: Set Git user email
+  git_config:
+    name: user.email
+    scope: global
+    value: "{{ git_user.email }}"
+  when: git_user.email | length > 0
+  tags: ["git"]
+          
+- name: Set Git signing key
+  git_config:
+    name: user.signingkey
+    scope: global
+    value: "{{ git_user.signing_key }}"
+  when: git_user.signing_key | length > 0
+  tags: ["git"]
+          
+- name: Enable commit signing
+  git_config:
+    name: commit.gpgsign
+    scope: global
+    value: "true"
+  when: git_user.signing_key | length > 0
+  tags: ["git"]

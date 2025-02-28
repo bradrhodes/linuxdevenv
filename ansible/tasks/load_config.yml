@@ -1,0 +1,81 @@
+---
+# Comprehensive debugging information
+- name: Gather comprehensive debug information
+  debug:
+    msg:
+      - "Ansible User ID: {{ ansible_user_id }}"
+      - "Effective User: {{ ansible_effective_user_id }}"
+      - "Environment USER: {{ lookup('env', 'USER') }}"
+      - "Environment HOME: {{ lookup('env', 'HOME') }}"
+      - "Ansible Environment HOME: {{ ansible_env.HOME | default('Not set', true) }}"
+      - "Current Working Directory: {{ ansible_env.PWD | default('Not set', true) }}"
+      - "Shell: {{ ansible_env.SHELL | default('Not set', true) }}"
+  when: debug_mode | bool
+  tags: ["debug"]
+
+- name: Determine home directory
+  set_fact:
+    detected_home_dir: >-
+      {{ lookup('env', 'HOME') | 
+         default(ansible_env.HOME, true) | 
+         default('/home/' + ansible_user_id, true) }}
+  tags: ["always"]
+
+- name: Display detected home directory
+  debug:
+    var: detected_home_dir
+  when: debug_mode | bool
+  tags: ["debug"]
+
+- name: Verify home directory permissions
+  stat:
+    path: "{{ detected_home_dir }}"
+  register: home_dir_stat
+  tags: ["always"]
+
+- name: Display home directory details
+  debug:
+    msg:
+      - "Home Directory Path: {{ home_dir_stat.stat.path | default('Not found') }}"
+      - "Exists: {{ home_dir_stat.stat.exists | default(false) }}"
+      - "Readable: {{ home_dir_stat.stat.readable | default(false) }}"
+      - "Owner: {{ home_dir_stat.stat.pw_name | default('Unknown') }}"
+      - "Group: {{ home_dir_stat.stat.gr_name | default('Unknown') }}"
+  when: debug_mode | bool
+  tags: ["debug"]
+
+- name: Check if public configuration exists
+  stat:
+    path: "{{ playbook_dir }}/group_vars/all/public.yml"
+  register: public_config_stat
+  delegate_to: localhost
+  
+- name: Check if private configuration exists
+  stat:
+    path: "{{ playbook_dir }}/group_vars/all/private.yml"
+  register: private_config_stat
+  delegate_to: localhost
+  
+- name: Show configuration file status
+  debug:
+    msg:
+      - "Public config exists: {{ public_config_stat.stat.exists | default(false) }}"
+      - "Private config exists: {{ private_config_stat.stat.exists | default(false) }}"
+      - "Playbook directory: {{ playbook_dir }}"
+  when: debug_mode | bool
+  tags: ["debug"]
+  
+- name: Explicitly load public configuration
+  include_vars:
+    file: "{{ playbook_dir }}/group_vars/all/public.yml"
+  when: public_config_stat.stat.exists
+  
+- name: Explicitly load private configuration
+  include_vars:
+    file: "{{ playbook_dir }}/group_vars/all/private.yml"
+  when: private_config_stat.stat.exists
+  
+- name: Fail if configuration files are missing
+  fail:
+    msg: "Required configuration files are missing. Please make sure both public.yml and private.yml exist in the group_vars/all directory."
+  when: not public_config_stat.stat.exists or not private_config_stat.stat.exists

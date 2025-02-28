@@ -1,0 +1,61 @@
+---
+- name: Check if TMUX Plugin Manager is installed
+  stat:
+    path: "{{ home_dir }}/.tmux/plugins/tpm"
+  register: tmux_tpm
+  tags: ["tmux"]
+
+- name: Create TMUX plugins directory
+  file:
+    path: "{{ home_dir }}/.tmux/plugins"
+    state: directory
+    mode: '0755'
+  when: install_tmux_plugins and not tmux_tpm.stat.exists
+  tags: ["tmux"]
+
+- name: Install TMUX Plugin Manager
+  git:
+    repo: https://github.com/tmux-plugins/tpm
+    dest: "{{ home_dir }}/.tmux/plugins/tpm"
+    clone: yes
+  when: install_tmux_plugins and not tmux_tpm.stat.exists
+  tags: ["tmux"]
+
+- name: Check if TMUX config exists
+  stat:
+    path: "{{ home_dir }}/.tmux.conf"
+  register: tmux_conf
+  tags: ["tmux"]
+
+- name: Create basic TMUX config
+  copy:
+    dest: "{{ home_dir }}/.tmux.conf"
+    content: |
+      # Set prefix to Ctrl-a
+      unbind C-b
+      set -g prefix {{ tmux_prefix | default('C-a') }}
+      bind {{ tmux_prefix | default('C-a') }} send-prefix
+
+      # Enable mouse mode
+      set -g mouse on
+
+      # Start windows and panes at 1, not 0
+      set -g base-index 1
+      setw -g pane-base-index 1
+
+      # TPM (Tmux Plugin Manager)
+      {% for plugin in tmux_plugins | default(['tmux-plugins/tpm', 'tmux-plugins/tmux-sensible', 'tmux-plugins/tmux-resurrect', 'tmux-plugins/tmux-continuum']) %}
+      set -g @plugin '{{ plugin }}'
+      {% endfor %}
+
+      # Initialize TMUX plugin manager
+      run '~/.tmux/plugins/tpm/tpm'
+    mode: '0644'
+  when: not tmux_conf.stat.exists and install_tmux_plugins and not tmux_tpm.stat.exists
+  tags: ["tmux"]
+  
+- name: Report TMUX plugins installation skipped
+  debug:
+    msg: "Skipping TMUX plugins installation (either already installed or disabled in configuration)"
+  when: not install_tmux_plugins or tmux_tpm.stat.exists
+  tags: ["tmux"]

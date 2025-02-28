@@ -1,0 +1,7 @@
+---
+- name: Configure Starship prompt
+  shell: |
+    mkdir -p {{ home_dir }}/.config
+    {{ home_dir }}/.local/bin/starship preset {{ starship_preset }} > {{ home_dir }}/.config/starship.toml
+  args:
+    creates: "{{ home_dir }}/.config/starship.toml"

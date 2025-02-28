@@ -1,0 +1,8 @@
+---
+# Shell defaults
+default_shell: "fish"
+fish_plugins:
+  - "jorgebucaran/fisher"
+  - "patrickf3139/colored_man_pages.fish"
+  - "jethrokuan/z"
+starship_preset: "pastel-powerline"

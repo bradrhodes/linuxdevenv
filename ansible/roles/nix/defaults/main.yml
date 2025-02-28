@@ -1,0 +1,3 @@
+---
+# Default Nix packages
+nix_packages: []
