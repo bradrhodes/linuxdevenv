@@ -1,0 +1,79 @@
+---
+- name: Ensure .local/bin exists
+  file:
+    path: "{{ home_dir }}/.local/bin"
+    state: directory
+    mode: '0755'
+  tags: ["python"]
+
+- name: Add .local/bin to PATH in shell
+  block:
+    - name: Check if fish config directory exists
+      stat:
+        path: "{{ home_dir }}/.config/fish"
+      register: fish_config_dir
+      tags: ["python", "fish"]
+
+    - name: Add .local/bin to fish PATH if fish is installed
+      lineinfile:
+        path: "{{ home_dir }}/.config/fish/conf.d/localbin.fish"
+        line: |
+          # Add ~/.local/bin to PATH if it exists and is not already present
+          if test -d ~/.local/bin
+            if not contains ~/.local/bin $PATH
+              set -x PATH ~/.local/bin $PATH
+            end
+          end
+        create: yes
+        mode: '0644'
+      when: fish_config_dir.stat.exists
+      tags: ["python", "fish"]
+  tags: ["python"]
+
+- name: Install uv from Homebrew
+  block:
+    - name: Source Homebrew environment and install uv
+      shell: |
+        eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)" && \
+        brew install uv
+      args:
+        executable: /bin/bash
+      register: uv_install
+      changed_when: uv_install.rc == 0 and "already installed" not in uv_install.stdout
+      failed_when: uv_install.rc != 0 and "already installed" not in uv_install.stderr and "already installed" not in uv_install.stdout
+      tags: ["python"]
+    
+    - name: Create fish completion directory if it doesn't exist
+      file:
+        path: "{{ home_dir }}/.config/fish/completions"
+        state: directory
+        mode: '0755'
+      when: fish_config_dir.stat.exists
+      tags: ["python", "fish"]
+
+    - name: Ensure uv has fish completions
+      shell: |
+        eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)" && \
+        cp -f $(brew --prefix)/share/fish/vendor_completions.d/uv.fish {{ home_dir }}/.config/fish/completions/ || true
+      args:
+        executable: /bin/bash
+      when: fish_config_dir.stat.exists
+      ignore_errors: yes
+      changed_when: false
+      tags: ["python", "fish"]
+  tags: ["python"]
+
+- name: Install Python tools with uv
+  block:
+    - name: Install Python tools
+      shell: |
+        eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)" && \
+        uv tool install --python {{ python_version }} {{ item }}
+      loop: "{{ python_tools }}"
+      args:
+        executable: /bin/bash
+      when: python_tools is defined and python_tools | length > 0
+      register: tool_install
+      changed_when: tool_install.rc == 0 and "already satisfied" not in tool_install.stdout
+      tags: ["python"]
+  tags: ["python"]

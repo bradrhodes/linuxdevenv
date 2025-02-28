@@ -37,6 +37,8 @@
     - git
     - ssh
     - nix
+    - homebrew
+    - python
     - { role: shell, when: default_shell is defined and default_shell != "" }
     - { role: editors, when: install_nvchad | default(false) }
     - { role: tmux, when: install_tmux_plugins | default(false) }

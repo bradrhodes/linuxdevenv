@@ -1,0 +1,107 @@
+---
+- name: Check if Homebrew is installed
+  command: which brew
+  register: brew_check
+  ignore_errors: true
+  changed_when: false
+  tags: ["homebrew"]
+
+- name: Install Homebrew
+  block:
+    - name: Create .local/bin directory
+      file:
+        path: "{{ home_dir }}/.local/bin"
+        state: directory
+        mode: '0755'
+      tags: ["homebrew"]
+
+    - name: Download and run Homebrew installer
+      shell: |
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/null
+      args:
+        creates: "{{ '/home/linuxbrew/.linuxbrew/bin/brew' if ansible_architecture == 'x86_64' else '/opt/homebrew/bin/brew' }}"
+      tags: ["homebrew"]
+  when: brew_check.rc != 0
+  tags: ["homebrew"]
+
+- name: Add Homebrew to PATH in shell config
+  block:
+    - name: Add Homebrew to PATH in .profile
+      lineinfile:
+        path: "{{ home_dir }}/.profile"
+        line: "{{ 'eval \"$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)\"' if ansible_architecture == 'x86_64' else 'eval \"$(/opt/homebrew/bin/brew shellenv)\"' }}"
+        create: yes
+      tags: ["homebrew"]
+
+    - name: Check if fish config directory exists
+      stat:
+        path: "{{ home_dir }}/.config/fish"
+      register: fish_config_dir
+      tags: ["homebrew", "fish"]
+
+    - name: Add Homebrew to fish config if fish is installed
+      lineinfile:
+        path: "{{ home_dir }}/.config/fish/conf.d/homebrew.fish"
+        line: |
+          # Homebrew setup (only if it exists)
+          if test -f {{ '/home/linuxbrew/.linuxbrew/bin/brew' if ansible_architecture == 'x86_64' else '/opt/homebrew/bin/brew' }}
+            eval ({{ '/home/linuxbrew/.linuxbrew/bin/brew' if ansible_architecture == 'x86_64' else '/opt/homebrew/bin/brew' }} shellenv)
+          end
+        create: yes
+        mode: '0644'
+      when: fish_config_dir.stat.exists
+      tags: ["homebrew", "fish"]
+  when: brew_check.rc == 0 or (ansible_architecture == 'x86_64' and lookup('file', '/home/linuxbrew/.linuxbrew/bin/brew', errors='ignore') != '') or (ansible_architecture != 'x86_64' and lookup('file', '/opt/homebrew/bin/brew', errors='ignore') != '')
+  tags: ["homebrew"]
+
+- name: Set Homebrew PATH for playbook
+  set_fact:
+    brew_bin: "{{ '/home/linuxbrew/.linuxbrew/bin' if ansible_architecture == 'x86_64' else '/opt/homebrew/bin' }}"
+  when: brew_check.rc != 0
+  tags: ["homebrew"]
+
+- name: Get Homebrew binary path
+  set_fact:
+    brew_binary: "{{ brew_check.stdout if brew_check.rc == 0 else (brew_bin + '/brew' if brew_bin is defined else 'brew') }}"
+  tags: ["homebrew"]
+
+- name: Check installed Homebrew packages
+  shell: "{{ brew_binary }} list --formula"
+  register: installed_brew_packages
+  changed_when: false
+  tags: ["homebrew"]
+
+- name: Install packages with Homebrew
+  shell: |
+    # Source the Homebrew environment first to ensure brew is in PATH
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)" && \
+    brew install {{ item }}
+  loop: "{{ brew_packages }}"
+  args:
+    executable: /bin/bash
+  register: brew_install
+  changed_when: brew_install.rc == 0 and "already installed" not in brew_install.stdout
+  failed_when: brew_install.rc != 0 and "already installed" not in brew_install.stderr and "already installed" not in brew_install.stdout
+  tags: ["homebrew", "packages"]
+  
+- name: Fix any incomplete post-install steps for GCC
+  shell: |
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)" && \
+    brew postinstall gcc
+  args:
+    executable: /bin/bash
+  when: "'post-install step did not complete successfully' in (brew_install.stderr | default(''))"
+  ignore_errors: yes
+  tags: ["homebrew", "packages"]
+  
+- name: List installed Homebrew packages
+  command: "{{ brew_binary }} list"
+  register: brew_list
+  changed_when: false
+  tags: ["homebrew"]
+  
+- name: Show installed Homebrew packages
+  debug:
+    msg: "Installed Homebrew packages: {{ brew_list.stdout_lines }}"
+  when: debug_mode | default(false) | bool
+  tags: ["homebrew", "debug"]
