@@ -79,3 +79,14 @@
   fail:
     msg: "Required configuration files are missing. Please make sure both public.yml and private.yml exist in the group_vars/all directory."
   when: not public_config_stat.stat.exists or not private_config_stat.stat.exists
+
+- name: Set default user after configuration loading
+  set_fact:
+    user: "{{ user | default(ansible_user_id, true) }}"
+    home_dir: "{{ home_dir | default(ansible_env.HOME, true) }}"
+
+- name: Debug user variable after configuration loading
+  debug:
+    msg: 
+      - "User variable: '{{ user }}'"
+      - "Ansible User ID: '{{ ansible_user_id }}'"
