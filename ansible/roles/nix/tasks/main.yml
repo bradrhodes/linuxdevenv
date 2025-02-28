@@ -6,6 +6,16 @@
   changed_when: false
   tags: ["nix"]
 
+- name: Get list of installed Nix packages
+  shell: |
+    . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+    nix profile list | awk '{print $2}' | sort
+  args:
+    executable: /bin/bash
+  register: installed_nix_packages
+  changed_when: false
+  tags: ["nix", "packages"]
+
 - name: Install Nix package manager
   block:
     - name: Download and run Nix installer
@@ -28,10 +38,13 @@
 - name: Install packages with Nix
   shell: |
     . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
-    nix profile install {{ nix_packages | join(' ') }}
+    nix profile install {{ item }}
   args:
     executable: /bin/bash
+  loop: "{{ nix_packages }}"
   register: nix_install
-  changed_when: "'error' not in nix_install.stderr"
-  when: nix_packages | length > 0
+  when: 
+    - nix_packages | length > 0
+    - item not in installed_nix_packages.stdout_lines
+  changed_when: nix_install.rc == 0
   tags: ["nix", "packages"]
