@@ -1,0 +1,76 @@
+---
+# =================================================================
+# Linux Development Environment Public Configuration
+# =================================================================
+# This file contains non-sensitive configuration options that can be
+# safely stored in a public repository.
+# =================================================================
+
+# User and environment settings
+# These are auto-detected but can be overridden here
+user: ""  # Leave empty to auto-detect (uses current user)
+home_dir: ""  # Leave empty to auto-detect (uses current user's home directory)
+
+# ===== CORE CONFIGURATION =====
+# Shell configuration
+default_shell: "fish"  # Options: fish, bash, zsh, etc.
+
+# Core editor setups
+install_nvchad: true  # Whether to install NvChad for Neovim
+install_tmux_plugins: true  # Whether to install TMUX plugins
+
+# Appearance
+nerd_font: "EnvyCodeR"  # Nerd Font to install (e.g., "JetBrainsMono", "FiraCode", "Hack")
+starship_preset: "pastel-powerline"  # Starship prompt preset
+
+# ===== PACKAGE LISTS =====
+# Nix packages to install
+nix_packages:
+  - "nixpkgs#fish"
+  - "nixpkgs#fzf"
+  - "nixpkgs#nushell"
+  - "nixpkgs#ncdu"
+  - "nixpkgs#duckdb"
+  - "nixpkgs#mc"
+  - "nixpkgs#neovim"
+  - "nixpkgs#git"
+  - "nixpkgs#chezmoi"
+  - "nixpkgs#ripgrep"
+  - "nixpkgs#bat"
+  - "nixpkgs#htop"
+  - "nixpkgs#eza"
+  - "nixpkgs#fontconfig"
+  - "nixpkgs#unzip"
+  - "nixpkgs#gcc"
+  - "nixpkgs#thefuck"
+
+# Homebrew packages to install
+brew_packages:
+  - "uv"
+  - "lazygit"
+
+# Fish plugins to install
+fish_plugins:
+  - "jorgebucaran/fisher"
+  - "edc/bass"
+  - "jorgebucaran/autopair.fish"
+  - "jethrokuan/z"
+
+# ===== UBUNTU SPECIFIC =====
+# Additional packages to install with apt
+apt_packages:
+  - "make"
+
+# ===== ADDITIONAL CONFIGURATION =====
+# Python tools
+python_version: "3.12"  # Python version to use with uv
+python_tools:
+  - "posting"
+
+# TMUX configuration
+tmux_prefix: "C-a"  # TMUX prefix key (C-a = Ctrl+A)
+tmux_plugins:
+  - "tmux-plugins/tpm"
+  - "tmux-plugins/tmux-sensible"
+  - "tmux-plugins/tmux-resurrect"
+  - "tmux-plugins/tmux-continuum"

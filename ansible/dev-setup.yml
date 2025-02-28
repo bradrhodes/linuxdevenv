@@ -1,0 +1,563 @@
+---
+# Linux Development Environment Setup Playbook
+# This playbook automates the setup of a complete development environment
+# including Nix, Fish shell, development tools, and editor configurations
+
+- name: Setup Linux Development Environment
+  hosts: localhost
+  become: false  # Escalate privileges only when needed
+  gather_facts: true
+
+  vars:
+    # These core variables can be overridden by the public config file
+    user: "{{ lookup('env', 'USER') }}"
+    home_dir: "{{ lookup('env', 'HOME') }}"
+    
+    # Default configuration options (will be overridden by config files)
+    # Public configuration defaults
+    default_shell: "fish"
+    install_nvchad: true
+    install_tmux_plugins: true
+    nerd_font: "EnvyCodeR"
+    starship_preset: "pastel-powerline"
+    
+    # Private configuration defaults
+    dotfiles_repo: ""
+    dotfiles_branch: "main"
+    dotfiles_apply: true
+    
+    git_user_name: ""
+    git_user_email: ""
+    git_signing_key: ""
+    
+    ssh_generate_key: true
+    ssh_key_type: "ed25519"
+    ssh_key_email: ""
+    ssh_key_passphrase: ""
+    
+    github_username: ""
+    github_upload_key: false
+    github_access_token: ""
+    
+    # Package lists (will be overridden by config files)
+    nix_packages:
+      - nixpkgs#fish
+      - nixpkgs#fzf
+      - nixpkgs#nushell
+      - nixpkgs#ncdu
+      - nixpkgs#duckdb
+      - nixpkgs#mc
+      - nixpkgs#neovim
+      - nixpkgs#git
+      - nixpkgs#chezmoi
+      - nixpkgs#ripgrep
+      - nixpkgs#bat
+      - nixpkgs#htop
+      - nixpkgs#eza
+      - nixpkgs#fontconfig
+      - nixpkgs#unzip
+      - nixpkgs#gcc
+      - nixpkgs#thefuck
+    brew_packages:
+      - uv
+    fish_plugins:
+      - jorgebucaran/fisher
+      - edc/bass
+      - jorgebucaran/autopair.fish
+      - jethrokuan/z
+
+  tasks:
+    - name: Check if running on Ubuntu/Debian
+      debug:
+        msg: "This playbook is optimized for Ubuntu/Debian. Some tasks may fail on other distributions."
+      when: ansible_distribution != "Ubuntu" and ansible_distribution != "Debian"
+
+    # ===== GIT CONFIGURATION =====
+    - name: Configure Git
+      block:
+        - name: Set Git user name
+          git_config:
+            name: user.name
+            scope: global
+            value: "{{ git_user_name }}"
+          when: git_user_name | length > 0
+          
+        - name: Set Git user email
+          git_config:
+            name: user.email
+            scope: global
+            value: "{{ git_user_email }}"
+          when: git_user_email | length > 0
+          
+        - name: Set Git signing key
+          git_config:
+            name: user.signingkey
+            scope: global
+            value: "{{ git_signing_key }}"
+          when: git_signing_key | length > 0
+          
+        - name: Enable commit signing
+          git_config:
+            name: commit.gpgsign
+            scope: global
+            value: "true"
+          when: git_signing_key | length > 0
+      tags: ["git"]
+
+    # ===== SSH CONFIGURATION =====
+    - name: Ensure SSH directory exists
+      file:
+        path: "{{ home_dir }}/.ssh"
+        state: directory
+        mode: '0700'
+      tags: ["ssh"]
+        
+    - name: Generate SSH key
+      openssh_keypair:
+        path: "{{ home_dir }}/.ssh/id_{{ ssh_key_type }}"
+        type: "{{ ssh_key_type }}"
+        comment: "{{ ssh_key_email | default(git_user_email) }}"
+        passphrase: "{{ ssh_key_passphrase | default('') }}"
+        force: false
+      when: ssh_generate_key | bool
+      register: ssh_key_result
+      tags: ["ssh"]
+        
+    - name: Start SSH agent
+      shell: |
+        eval "$(ssh-agent -s)"
+        {% if ssh_key_passphrase | length > 0 %}
+        echo "{{ ssh_key_passphrase }}" | SSH_ASKPASS=/bin/cat ssh-add {{ home_dir }}/.ssh/id_{{ ssh_key_type }} < /dev/null
+        {% else %}
+        ssh-add {{ home_dir }}/.ssh/id_{{ ssh_key_type }}
+        {% endif %}
+      args:
+        executable: /bin/bash
+      when: ssh_generate_key | bool and ssh_key_result.changed
+      tags: ["ssh"]
+
+    # ===== GITHUB CONFIGURATION =====
+    - name: Upload SSH key to GitHub
+      block:
+        - name: Get public key content
+          command: "cat {{ home_dir }}/.ssh/id_{{ ssh_key_type }}.pub"
+          register: ssh_public_key
+          changed_when: false
+          
+        - name: Create unique key title
+          set_fact:
+            key_title: "{{ ansible_hostname }}-{{ ansible_date_time.date }}"
+          
+        - name: Upload key to GitHub
+          uri:
+            url: https://api.github.com/user/keys
+            method: POST
+            body:
+              title: "{{ key_title }}"
+              key: "{{ ssh_public_key.stdout }}"
+            body_format: json
+            headers:
+              Authorization: "token {{ github_access_token }}"
+              Accept: "application/vnd.github+json"
+            status_code: [201, 422]  # 422 means key already exists
+          register: github_key_upload
+          no_log: true
+          
+        - name: Test GitHub SSH connection
+          shell: ssh -T -o StrictHostKeyChecking=no git@github.com || true
+          args:
+            executable: /bin/bash
+          register: github_ssh_test
+          changed_when: false
+          
+        - name: Display GitHub SSH test results
+          debug:
+            msg: "{{ github_ssh_test.stdout_lines }}"
+      when: 
+        - github_upload_key | bool
+        - github_access_token | length > 0
+        - github_username | length > 0
+      tags: ["github", "ssh"]
+    - name: Check if Nix is installed
+      command: which nix
+      register: nix_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Install Nix package manager
+      block:
+        - name: Download and run Nix installer
+          shell: |
+            curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install --no-confirm
+          args:
+            creates: /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+      when: nix_check.rc != 0
+
+    - name: Source Nix environment (temporary for this playbook)
+      shell: |
+        . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+        echo "$PATH"
+      register: nix_path
+      changed_when: false
+      when: nix_check.rc != 0
+
+    # ===== NIX PACKAGES =====
+    - name: Install packages with Nix
+      shell: |
+        . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+        nix profile install {{ nix_packages | join(' ') }}
+      args:
+        executable: /bin/bash
+      register: nix_install
+      changed_when: "'error' not in nix_install.stderr"
+
+    # ===== UBUNTU SPECIFIC =====
+    - name: Install Ubuntu/Debian specific packages
+      become: true
+      apt:
+        name: 
+          - make
+        state: present
+        update_cache: yes
+      when: ansible_distribution == "Ubuntu" or ansible_distribution == "Debian"
+
+# ===== HOMEBREW =====
+    - name: Check if Homebrew is installed
+      command: which brew
+      register: brew_check
+      ignore_errors: true
+      changed_when: false
+      tags: ["homebrew"]
+
+    - name: Install Homebrew
+      block:
+        - name: Download and run Homebrew installer
+          shell: |
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/null
+          args:
+            creates: "{{ '/home/linuxbrew/.linuxbrew/bin/brew' if ansible_architecture == 'x86_64' else '/opt/homebrew/bin/brew' }}"
+      when: brew_check.rc != 0
+      tags: ["homebrew"]
+
+    - name: Add Homebrew to PATH in .profile
+      lineinfile:
+        path: "{{ home_dir }}/.profile"
+        line: "{{ 'eval \"$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)\"' if ansible_architecture == 'x86_64' else 'eval \"$(/opt/homebrew/bin/brew shellenv)\"' }}"
+        create: yes
+      when: brew_check.rc != 0
+      tags: ["homebrew"]
+
+    - name: Set Homebrew PATH for playbook
+      set_fact:
+        brew_bin: "{{ '/home/linuxbrew/.linuxbrew/bin' if ansible_architecture == 'x86_64' else '/opt/homebrew/bin' }}"
+      when: brew_check.rc != 0
+      tags: ["homebrew"]
+
+    # ===== BREW PACKAGES =====
+    - name: Get Homebrew binary path
+      set_fact:
+        brew_binary: "{{ brew_check.stdout if brew_check.rc == 0 else (brew_bin + '/brew' if brew_bin is defined else 'brew') }}"
+      tags: ["homebrew"]
+
+    - name: Install packages with Homebrew
+      shell: |
+        {{ brew_binary }} install {{ item }}
+      loop: "{{ brew_packages }}"
+      args:
+        executable: /bin/bash
+      register: brew_install
+      changed_when: "'already installed' not in brew_install.stdout"
+      tags: ["homebrew"]
+      
+    - name: List installed Homebrew packages
+      command: "{{ brew_binary }} list"
+      register: brew_list
+      changed_when: false
+      tags: ["homebrew"]
+      
+    - name: Show installed Homebrew packages
+      debug:
+        msg: "Installed Homebrew packages: {{ brew_list.stdout_lines }}"
+      tags: ["homebrew"]
+
+    # ===== PYTHON TOOLS =====
+    - name: Install Python tools with uv
+      shell: |
+        {{ brew_bin }}/uv tool install --python 3.12 posting
+      args:
+        executable: /bin/bash
+      environment:
+        PATH: "{{ brew_bin }}:{{ ansible_env.PATH }}"
+      when: brew_check.rc != 0
+
+    # ===== FISH SHELL SETUP =====
+    - name: Get fish shell path
+      command: which fish
+      register: fish_path
+      changed_when: false
+      ignore_errors: true
+
+    - name: Set up Fish shell
+      block:
+        - name: Add fish to /etc/shells
+          become: true
+          lineinfile:
+            dest: /etc/shells
+            line: "{{ fish_path.stdout }}"
+            state: present
+
+        - name: Set fish as default shell
+          become: true
+          user:
+            name: "{{ user }}"
+            shell: "{{ fish_path.stdout }}"
+
+        - name: Create Fish config directories
+          file:
+            path: "{{ home_dir }}/.config/fish/conf.d"
+            state: directory
+            mode: '0755'
+
+        - name: Create Nix config for Fish
+          copy:
+            dest: "{{ home_dir }}/.config/fish/conf.d/nix.fish"
+            content: |
+              if test -e /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.fish
+                source /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.fish
+              end
+            mode: '0644'
+
+        - name: Install Fisher (Fish plugin manager)
+          shell: |
+            fish -c "curl -sL https://git.io/fisher | source && fisher install jorgebucaran/fisher"
+          args:
+            creates: "{{ home_dir }}/.config/fish/functions/fisher.fish"
+
+        - name: Install Fish plugins
+          shell: |
+            fish -c "fisher install {{ item }}"
+          loop: "{{ fish_plugins }}"
+
+        - name: Install Starship prompt
+          shell: |
+            curl -sS https://starship.rs/install.sh | sh -s -- --yes --bin-dir {{ home_dir }}/.local/bin/
+          args:
+            creates: "{{ home_dir }}/.local/bin/starship"
+
+        - name: Configure Starship prompt
+          shell: |
+            mkdir -p {{ home_dir }}/.config
+            {{ home_dir }}/.local/bin/starship preset {{ starship_preset }} > {{ home_dir }}/.config/starship.toml
+          args:
+            creates: "{{ home_dir }}/.config/starship.toml"
+      when: default_shell == "fish" and fish_path.rc == 0
+      tags: ["fish"]
+
+# ===== FONTS =====
+    - name: Create fonts directory
+      file:
+        path: "{{ home_dir }}/.fonts"
+        state: directory
+        mode: '0755'
+      when: nerd_font != ""
+      tags: ["fonts"]
+
+    - name: Check if Nerd Font zip already exists
+      stat:
+        path: "{{ home_dir }}/.fonts/{{ nerd_font }}.zip"
+      register: font_zip_stat
+      when: nerd_font != ""
+      tags: ["fonts"]
+
+    - name: Download Nerd Font
+      get_url:
+        url: "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.3.0/{{ nerd_font }}.zip"
+        dest: "{{ home_dir }}/.fonts/{{ nerd_font }}.zip"
+      when: 
+        - nerd_font != ""
+        - not font_zip_stat.stat.exists or font_zip_stat.stat.size == 0
+      tags: ["fonts"]
+      register: font_download
+
+    - name: Check if font already extracted
+      find:
+        paths: "{{ home_dir }}/.fonts"
+        patterns: "*.ttf,*.otf"
+      register: font_files
+      when: nerd_font != ""
+      tags: ["fonts"]
+
+    - name: Unzip font files
+      unarchive:
+        src: "{{ home_dir }}/.fonts/{{ nerd_font }}.zip"
+        dest: "{{ home_dir }}/.fonts"
+        remote_src: yes
+      when: 
+        - nerd_font != ""
+        - (font_download.changed or (font_zip_stat.stat.exists and font_files.matched == 0))
+        - not ansible_check_mode
+      tags: ["fonts"]
+
+    - name: Clean up font zip and readme files (check mode skipped)
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ home_dir }}/.fonts/{{ nerd_font }}.zip"
+        - "{{ home_dir }}/.fonts/*.md"
+      ignore_errors: true
+      when: 
+        - nerd_font != ""
+        - not ansible_check_mode
+      tags: ["fonts"]
+
+    - name: Update font cache (check mode skipped)
+      command: fc-cache -fv
+      changed_when: true
+      when: 
+        - nerd_font != ""
+        - not ansible_check_mode
+      tags: ["fonts"]
+
+    - name: Font installation would be performed (check mode only)
+      debug:
+        msg: "In non-check mode, would download and install {{ nerd_font }} font"
+      when:
+        - nerd_font != ""
+        - ansible_check_mode
+      tags: ["fonts"]
+
+    # ===== NEOVIM SETUP =====
+    - name: Check if NvChad is installed
+      stat:
+        path: "{{ home_dir }}/.config/nvim"
+      register: nvim_config
+      tags: ["editors", "neovim"]
+
+    - name: Install NvChad
+      git:
+        repo: https://github.com/NvChad/starter
+        dest: "{{ home_dir }}/.config/nvim"
+        clone: yes
+      when: install_nvchad and not nvim_config.stat.exists
+      tags: ["editors", "neovim"]
+      
+    - name: Report NvChad installation skipped
+      debug:
+        msg: "Skipping NvChad installation (either already installed or disabled in configuration)"
+      when: not install_nvchad or nvim_config.stat.exists
+      tags: ["editors", "neovim"]
+
+    # ===== TMUX SETUP =====
+    - name: Check if TMUX Plugin Manager is installed
+      stat:
+        path: "{{ home_dir }}/.tmux/plugins/tpm"
+      register: tmux_tpm
+      tags: ["tmux"]
+
+    - name: Setup TMUX and plugins
+      block:
+        - name: Create TMUX plugins directory
+          file:
+            path: "{{ home_dir }}/.tmux/plugins"
+            state: directory
+            mode: '0755'
+
+        - name: Install TMUX Plugin Manager
+          git:
+            repo: https://github.com/tmux-plugins/tpm
+            dest: "{{ home_dir }}/.tmux/plugins/tpm"
+            clone: yes
+
+        - name: Check if TMUX config exists
+          stat:
+            path: "{{ home_dir }}/.tmux.conf"
+          register: tmux_conf
+
+        - name: Create basic TMUX config
+          copy:
+            dest: "{{ home_dir }}/.tmux.conf"
+            content: |
+              # Set prefix to Ctrl-a
+              unbind C-b
+              set -g prefix C-a
+              bind C-a send-prefix
+
+              # Enable mouse mode
+              set -g mouse on
+
+              # Start windows and panes at 1, not 0
+              set -g base-index 1
+              setw -g pane-base-index 1
+
+              # TPM (Tmux Plugin Manager)
+              set -g @plugin 'tmux-plugins/tpm'
+              set -g @plugin 'tmux-plugins/tmux-sensible'
+              set -g @plugin 'tmux-plugins/tmux-resurrect'
+              set -g @plugin 'tmux-plugins/tmux-continuum'
+
+              # Initialize TMUX plugin manager
+              run '~/.tmux/plugins/tpm/tpm'
+            mode: '0644'
+          when: not tmux_conf.stat.exists
+      when: install_tmux_plugins and not tmux_tpm.stat.exists
+      tags: ["tmux"]
+      
+    - name: Report TMUX plugins installation skipped
+      debug:
+        msg: "Skipping TMUX plugins installation (either already installed or disabled in configuration)"
+      when: not install_tmux_plugins or tmux_tpm.stat.exists
+      tags: ["tmux"]
+
+# ===== CHEZMOI DOTFILES =====
+    - name: Check if chezmoi is installed
+      command: which chezmoi
+      register: chezmoi_check
+      ignore_errors: true
+      changed_when: false
+      tags: ["chezmoi", "dotfiles"]
+
+    - name: Set up dotfiles with chezmoi
+      block:
+        - name: Initialize chezmoi with repository
+          command: >
+            chezmoi init 
+            {% if dotfiles_branch | length > 0 %}--branch {{ dotfiles_branch }}{% endif %}
+            {{ dotfiles_repo }}
+          args:
+            creates: "{{ home_dir }}/.local/share/chezmoi/.git"
+          register: chezmoi_init
+          when: dotfiles_repo | length > 0
+          
+        - name: Apply dotfiles with chezmoi
+          command: chezmoi apply
+          when: 
+            - dotfiles_repo | length > 0
+            - dotfiles_apply | bool
+            - chezmoi_init is defined
+            - chezmoi_init.changed
+          
+        - name: Report chezmoi initialization status
+          debug:
+            msg: "Dotfiles successfully initialized with chezmoi from {{ dotfiles_repo }}"
+          when: 
+            - dotfiles_repo | length > 0
+            - chezmoi_init is defined
+            - chezmoi_init.changed
+          
+        - name: Report no dotfiles repository configured
+          debug:
+            msg: "No dotfiles repository configured, skipping dotfiles setup"
+          when: dotfiles_repo | length == 0
+      when: chezmoi_check.rc == 0
+      tags: ["chezmoi", "dotfiles"]
+
+    # ===== FINAL MESSAGE =====
+    - name: Display final message
+      debug:
+        msg: |
+          Development environment setup complete!
+          You may need to log out and log back in for all changes to take effect.
+          To complete Neovim setup, run: nvim
+          To install TMUX plugins, press prefix + I (capital I) in a TMUX session.
+          Remember to manually set up spacemacs if needed.
