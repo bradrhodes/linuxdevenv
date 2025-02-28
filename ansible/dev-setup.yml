@@ -2,69 +2,110 @@
 # Linux Development Environment Setup Playbook
 # This playbook automates the setup of a complete development environment
 # including Nix, Fish shell, development tools, and editor configurations
+#
+# Usage with encrypted private config:
+#   ansible-playbook -i inventory.ini dev-setup.yml -e "@public-config.yml" -e "@private-config.yml" --ask-vault-pass
+#
+# Encryption instructions:
+#   ansible-vault encrypt private-config.yml
 
 - name: Setup Linux Development Environment
   hosts: localhost
   become: false  # Escalate privileges only when needed
   gather_facts: true
 
+  pre_tasks:
+    - name: Comprehensive Environment Debugging
+      block:
+        - name: Gather comprehensive debug information
+          debug:
+            msg:
+              - "Ansible User ID: {{ ansible_user_id }}"
+              - "Effective User: {{ ansible_effective_user_id }}"
+              - "Environment USER: {{ lookup('env', 'USER') }}"
+              - "Environment HOME: {{ lookup('env', 'HOME') }}"
+              - "Ansible Environment HOME: {{ ansible_env.HOME | default('Not set', true) }}"
+              - "Current Working Directory: {{ ansible_env.PWD | default('Not set', true) }}"
+              - "Shell: {{ ansible_env.SHELL | default('Not set', true) }}"
+        
+        - name: Determine home directory
+          set_fact:
+            detected_home_dir: >-
+              {{ lookup('env', 'HOME') | 
+                 default(ansible_env.HOME, true) | 
+                 default('/home/' + ansible_user_id, true) }}
+        
+        - name: Display detected home directory
+          debug:
+            var: detected_home_dir
+      tags: ["always", "debug"]
+
+    - name: Verify home directory permissions
+      stat:
+        path: "{{ detected_home_dir }}"
+      register: home_dir_stat
+      tags: ["always", "debug"]
+
+    - name: Display home directory details
+      debug:
+        msg:
+          - "Home Directory Path: {{ home_dir_stat.stat.path | default('Not found') }}"
+          - "Exists: {{ home_dir_stat.stat.exists | default(false) }}"
+          - "Readable: {{ home_dir_stat.stat.readable | default(false) }}"
+          - "Owner: {{ home_dir_stat.stat.pw_name | default('Unknown') }}"
+          - "Group: {{ home_dir_stat.stat.gr_name | default('Unknown') }}"
+      tags: ["always", "debug"]
+
+    - name: Check if public configuration exists
+      stat:
+        path: "{{ playbook_dir }}/group_vars/all/public.yml"
+      register: public_config_stat
+      delegate_to: localhost
+      
+    - name: Check if private configuration exists
+      stat:
+        path: "{{ playbook_dir }}/group_vars/all/private.yml"
+      register: private_config_stat
+      delegate_to: localhost
+      
+    - name: Show configuration file status
+      debug:
+        msg:
+          - "Public config exists: {{ public_config_stat.stat.exists | default(false) }}"
+          - "Private config exists: {{ private_config_stat.stat.exists | default(false) }}"
+          - "Playbook directory: {{ playbook_dir }}"
+      
+    - name: Explicitly load public configuration
+      include_vars:
+        file: "{{ playbook_dir }}/group_vars/all/public.yml"
+      when: public_config_stat.stat.exists
+      
+    - name: Explicitly load private configuration
+      include_vars:
+        file: "{{ playbook_dir }}/group_vars/all/private.yml"
+      when: private_config_stat.stat.exists
+      
+    - name: Fail if configuration files are missing
+      fail:
+        msg: "Required configuration files are missing. Please make sure both public.yml and private.yml exist in the group_vars/all directory."
+      when: not public_config_stat.stat.exists or not private_config_stat.stat.exists
+
+    - name: Set default user after configuration loading
+      set_fact:
+        user: "{{ user | default(ansible_user_id, true) }}"
+        home_dir: "{{ home_dir | default(ansible_env.HOME, true) }}"
+
+    - name: Debug user variable after configuration loading
+      debug:
+        msg: 
+          - "User variable: '{{ user }}'"
+          - "Ansible User ID: '{{ ansible_user_id }}'"
+
   vars:
-    # These core variables can be overridden by the public config file
-    user: "{{ lookup('env', 'USER') }}"
-    home_dir: "{{ lookup('env', 'HOME') }}"
-    
-    # Default configuration options (will be overridden by config files)
-    # Public configuration defaults
-    default_shell: "fish"
-    install_nvchad: true
-    install_tmux_plugins: true
-    nerd_font: "EnvyCodeR"
-    starship_preset: "pastel-powerline"
-    
-    # Private configuration defaults
-    dotfiles_repo: ""
-    dotfiles_branch: "main"
-    dotfiles_apply: true
-    
-    git_user_name: ""
-    git_user_email: ""
-    git_signing_key: ""
-    
-    ssh_generate_key: true
-    ssh_key_type: "ed25519"
-    ssh_key_email: ""
-    ssh_key_passphrase: ""
-    
-    github_username: ""
-    github_upload_key: false
-    github_access_token: ""
-    
-    # Package lists (will be overridden by config files)
-    nix_packages:
-      - nixpkgs#fish
-      - nixpkgs#fzf
-      - nixpkgs#nushell
-      - nixpkgs#ncdu
-      - nixpkgs#duckdb
-      - nixpkgs#mc
-      - nixpkgs#neovim
-      - nixpkgs#git
-      - nixpkgs#chezmoi
-      - nixpkgs#ripgrep
-      - nixpkgs#bat
-      - nixpkgs#htop
-      - nixpkgs#eza
-      - nixpkgs#fontconfig
-      - nixpkgs#unzip
-      - nixpkgs#gcc
-      - nixpkgs#thefuck
-    brew_packages:
-      - uv
-    fish_plugins:
-      - jorgebucaran/fisher
-      - edc/bass
-      - jorgebucaran/autopair.fish
-      - jethrokuan/z
+    # Only environment variables that need to be determined at runtime
+    user: "{{ lookup('env', 'USER') | default(ansible_user_id, true) }}"
+    home_dir: "{{ lookup('env', 'HOME') | default(ansible_env.HOME, true) }}"
+    # All other variables should be defined in configuration files
 
   tasks:
     - name: Check if running on Ubuntu/Debian
@@ -79,105 +120,133 @@
           git_config:
             name: user.name
             scope: global
-            value: "{{ git_user_name }}"
-          when: git_user_name | length > 0
+            value: "{{ git_user.name }}"
+          when: git_user.name | length > 0
           
         - name: Set Git user email
           git_config:
             name: user.email
             scope: global
-            value: "{{ git_user_email }}"
-          when: git_user_email | length > 0
+            value: "{{ git_user.email }}"
+          when: git_user.email | length > 0
           
         - name: Set Git signing key
           git_config:
             name: user.signingkey
             scope: global
-            value: "{{ git_signing_key }}"
-          when: git_signing_key | length > 0
+            value: "{{ git_user.signing_key }}"
+          when: git_user.signing_key | length > 0
           
         - name: Enable commit signing
           git_config:
             name: commit.gpgsign
             scope: global
             value: "true"
-          when: git_signing_key | length > 0
+          when: git_user.signing_key | length > 0
       tags: ["git"]
 
     # ===== SSH CONFIGURATION =====
-    - name: Ensure SSH directory exists
-      file:
-        path: "{{ home_dir }}/.ssh"
-        state: directory
-        mode: '0700'
-      tags: ["ssh"]
-        
-    - name: Generate SSH key
-      openssh_keypair:
-        path: "{{ home_dir }}/.ssh/id_{{ ssh_key_type }}"
-        type: "{{ ssh_key_type }}"
-        comment: "{{ ssh_key_email | default(git_user_email) }}"
-        passphrase: "{{ ssh_key_passphrase | default('') }}"
-        force: false
-      when: ssh_generate_key | bool
-      register: ssh_key_result
-      tags: ["ssh"]
-        
-    - name: Start SSH agent
-      shell: |
-        eval "$(ssh-agent -s)"
-        {% if ssh_key_passphrase | length > 0 %}
-        echo "{{ ssh_key_passphrase }}" | SSH_ASKPASS=/bin/cat ssh-add {{ home_dir }}/.ssh/id_{{ ssh_key_type }} < /dev/null
-        {% else %}
-        ssh-add {{ home_dir }}/.ssh/id_{{ ssh_key_type }}
-        {% endif %}
-      args:
-        executable: /bin/bash
-      when: ssh_generate_key | bool and ssh_key_result.changed
-      tags: ["ssh"]
-
-    # ===== GITHUB CONFIGURATION =====
-    - name: Upload SSH key to GitHub
+    - name: Comprehensive SSH Key Setup
       block:
-        - name: Get public key content
-          command: "cat {{ home_dir }}/.ssh/id_{{ ssh_key_type }}.pub"
-          register: ssh_public_key
-          changed_when: false
-          
-        - name: Create unique key title
+        # Detect home directory with multiple fallback methods
+        - name: Determine definitive home directory
           set_fact:
-            key_title: "{{ ansible_hostname }}-{{ ansible_date_time.date }}"
-          
-        - name: Upload key to GitHub
-          uri:
-            url: https://api.github.com/user/keys
-            method: POST
-            body:
-              title: "{{ key_title }}"
-              key: "{{ ssh_public_key.stdout }}"
-            body_format: json
-            headers:
-              Authorization: "token {{ github_access_token }}"
-              Accept: "application/vnd.github+json"
-            status_code: [201, 422]  # 422 means key already exists
-          register: github_key_upload
-          no_log: true
-          
-        - name: Test GitHub SSH connection
-          shell: ssh -T -o StrictHostKeyChecking=no git@github.com || true
+            effective_home_dir: >-
+              {{ 
+                lookup('env', 'HOME') | 
+                default(ansible_env.HOME, true) | 
+                default('/home/' + ansible_user_id, true) 
+              }}
+            ssh_key_type: "{{ ssh.key_type | default('ed25519') }}"
+
+        # Check if SSH key already exists
+        - name: Check existing SSH key
+          stat:
+            path: "{{ effective_home_dir }}/.ssh/id_{{ ssh_key_type }}.pub"
+          register: existing_ssh_key
+
+        # Conditional SSH key generation with environment awareness
+        - name: Generate SSH key with cross-platform considerations
+          openssh_keypair:
+            path: "{{ effective_home_dir }}/.ssh/id_{{ ssh_key_type }}"
+            type: "{{ ssh_key_type }}"
+            comment: "{{ ssh.key_email | default(ansible_user_id + '@' + ansible_hostname) }}"
+            passphrase: "{{ ssh.key_passphrase | default('', true) }}"
+            force: false
+            owner: "{{ ansible_user_id }}"
+            group: "{{ ansible_user_id }}"
+            mode: '0600'
+          become: yes
+          become_method: sudo
+          become_user: "{{ ansible_user_id }}"
+          when: ssh.generate_key | default(true) | bool and not existing_ssh_key.stat.exists
+          register: ssh_key_generation
+
+        # Start SSH agent
+        - name: Start SSH agent
+          shell: |
+            eval "$(ssh-agent -s)"
+            {% if ssh.key_passphrase | length > 0 %}
+            echo "{{ ssh.key_passphrase }}" | SSH_ASKPASS=/bin/cat ssh-add {{ effective_home_dir }}/.ssh/id_{{ ssh_key_type }} < /dev/null
+            {% else %}
+            ssh-add {{ effective_home_dir }}/.ssh/id_{{ ssh_key_type }}
+            {% endif %}
           args:
             executable: /bin/bash
-          register: github_ssh_test
-          changed_when: false
-          
-        - name: Display GitHub SSH test results
-          debug:
-            msg: "{{ github_ssh_test.stdout_lines }}"
-      when: 
-        - github_upload_key | bool
-        - github_access_token | length > 0
-        - github_username | length > 0
-      tags: ["github", "ssh"]
+          become: yes
+          become_method: sudo
+          become_user: "{{ ansible_user_id }}"
+          when: 
+            - ssh.generate_key | default(true) | bool
+            - existing_ssh_key.stat.exists or (ssh_key_generation.changed | default(false))
+          ignore_errors: yes
+          tags: ["ssh"]
+
+        # GitHub SSH Key Upload
+        - name: Upload SSH key to GitHub
+          block:
+            - name: Get public key content
+              command: "cat {{ effective_home_dir }}/.ssh/id_{{ ssh_key_type }}.pub"
+              register: ssh_public_key
+              changed_when: false
+              
+            - name: Create unique key title
+              set_fact:
+                key_title: "{{ ansible_hostname }}-{{ ansible_date_time.date }}"
+              
+            - name: Upload key to GitHub
+              uri:
+                url: https://api.github.com/user/keys
+                method: POST
+                body:
+                  title: "{{ key_title }}"
+                  key: "{{ ssh_public_key.stdout }}"
+                body_format: json
+                headers:
+                  Authorization: "token {{ github.access_token }}"
+                  Accept: "application/vnd.github+json"
+                status_code: [201, 422]  # 422 means key already exists
+              register: github_key_upload
+              no_log: true
+              
+            - name: Test GitHub SSH connection
+              shell: ssh -T -o StrictHostKeyChecking=no git@github.com || true
+              args:
+                executable: /bin/bash
+              register: github_ssh_test
+              changed_when: false
+              
+            - name: Display GitHub SSH test results
+              debug:
+                msg: "{{ github_ssh_test.stdout_lines }}"
+          when: 
+            - github.upload_key | bool
+            - github.access_token | length > 0
+            - github.username | length > 0
+          tags: ["github", "ssh"]
+      tags: ["ssh", "security"]
+ 
+    # ===== NIX INSTALLATION =====
     - name: Check if Nix is installed
       command: which nix
       register: nix_check
@@ -215,13 +284,12 @@
     - name: Install Ubuntu/Debian specific packages
       become: true
       apt:
-        name: 
-          - make
+        name: "{{ apt_packages }}"
         state: present
         update_cache: yes
       when: ansible_distribution == "Ubuntu" or ansible_distribution == "Debian"
 
-# ===== HOMEBREW =====
+    # ===== HOMEBREW =====
     - name: Check if Homebrew is installed
       command: which brew
       register: brew_check
@@ -259,6 +327,11 @@
         brew_binary: "{{ brew_check.stdout if brew_check.rc == 0 else (brew_bin + '/brew' if brew_bin is defined else 'brew') }}"
       tags: ["homebrew"]
 
+    - name: Debug brew packages
+      debug:
+        msg: "Brew packages to install: {{ brew_packages | join(', ') }}"
+      tags: ["homebrew"]
+
     - name: Install packages with Homebrew
       shell: |
         {{ brew_binary }} install {{ item }}
@@ -281,14 +354,27 @@
       tags: ["homebrew"]
 
     # ===== PYTHON TOOLS =====
+    - name: Check if uv is installed
+      command: which uv
+      register: uv_check
+      ignore_errors: true
+      changed_when: false
+      tags: ["python"]
+
+    - name: Install uv if not present
+      shell: |
+        {{ brew_binary }} install uv
+      when: uv_check.rc != 0
+      tags: ["python"]
+
     - name: Install Python tools with uv
       shell: |
-        {{ brew_bin }}/uv tool install --python 3.12 posting
+        uv tool install --python {{ python_version }} {{ item }}
+      loop: "{{ python_tools }}"
       args:
         executable: /bin/bash
-      environment:
-        PATH: "{{ brew_bin }}:{{ ansible_env.PATH }}"
-      when: brew_check.rc != 0
+      when: python_tools is defined and python_tools | length > 0
+      tags: ["python"]
 
     # ===== FISH SHELL SETUP =====
     - name: Get fish shell path
@@ -353,7 +439,7 @@
       when: default_shell == "fish" and fish_path.rc == 0
       tags: ["fish"]
 
-# ===== FONTS =====
+    # ===== FONTS =====
     - name: Create fonts directory
       file:
         path: "{{ home_dir }}/.fonts"
@@ -480,8 +566,8 @@
             content: |
               # Set prefix to Ctrl-a
               unbind C-b
-              set -g prefix C-a
-              bind C-a send-prefix
+              set -g prefix {{ tmux_prefix | default('C-a') }}
+              bind {{ tmux_prefix | default('C-a') }} send-prefix
 
               # Enable mouse mode
               set -g mouse on
@@ -491,10 +577,9 @@
               setw -g pane-base-index 1
 
               # TPM (Tmux Plugin Manager)
-              set -g @plugin 'tmux-plugins/tpm'
-              set -g @plugin 'tmux-plugins/tmux-sensible'
-              set -g @plugin 'tmux-plugins/tmux-resurrect'
-              set -g @plugin 'tmux-plugins/tmux-continuum'
+              {% for plugin in tmux_plugins | default(['tmux-plugins/tpm', 'tmux-plugins/tmux-sensible', 'tmux-plugins/tmux-resurrect', 'tmux-plugins/tmux-continuum']) %}
+              set -g @plugin '{{ plugin }}'
+              {% endfor %}
 
               # Initialize TMUX plugin manager
               run '~/.tmux/plugins/tpm/tpm'
@@ -509,7 +594,7 @@
       when: not install_tmux_plugins or tmux_tpm.stat.exists
       tags: ["tmux"]
 
-# ===== CHEZMOI DOTFILES =====
+    # ===== CHEZMOI DOTFILES =====
     - name: Check if chezmoi is installed
       command: which chezmoi
       register: chezmoi_check
@@ -522,33 +607,33 @@
         - name: Initialize chezmoi with repository
           command: >
             chezmoi init 
-            {% if dotfiles_branch | length > 0 %}--branch {{ dotfiles_branch }}{% endif %}
-            {{ dotfiles_repo }}
+            {% if dotfiles.branch | length > 0 %}--branch {{ dotfiles.branch }}{% endif %}
+            {{ dotfiles.repo }}
           args:
             creates: "{{ home_dir }}/.local/share/chezmoi/.git"
           register: chezmoi_init
-          when: dotfiles_repo | length > 0
+          when: dotfiles.repo | length > 0
           
         - name: Apply dotfiles with chezmoi
           command: chezmoi apply
           when: 
-            - dotfiles_repo | length > 0
-            - dotfiles_apply | bool
+            - dotfiles.repo | length > 0
+            - dotfiles.apply | bool
             - chezmoi_init is defined
             - chezmoi_init.changed
           
         - name: Report chezmoi initialization status
           debug:
-            msg: "Dotfiles successfully initialized with chezmoi from {{ dotfiles_repo }}"
+            msg: "Dotfiles successfully initialized with chezmoi from {{ dotfiles.repo }}"
           when: 
-            - dotfiles_repo | length > 0
+            - dotfiles.repo | length > 0
             - chezmoi_init is defined
             - chezmoi_init.changed
           
         - name: Report no dotfiles repository configured
           debug:
             msg: "No dotfiles repository configured, skipping dotfiles setup"
-          when: dotfiles_repo | length == 0
+          when: dotfiles.repo | length == 0
       when: chezmoi_check.rc == 0
       tags: ["chezmoi", "dotfiles"]
 
