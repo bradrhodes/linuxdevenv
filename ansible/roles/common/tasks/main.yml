@@ -13,3 +13,12 @@
     update_cache: yes
   when: ansible_distribution == "Ubuntu" or ansible_distribution == "Debian"
   tags: ["common", "packages"]
+
+- name: Ensure unzip is installed
+  become: true
+  apt:
+    name: unzip
+    state: present
+    update_cache: no
+  when: ansible_distribution == "Ubuntu" or ansible_distribution == "Debian"
+  tags: ["common", "packages", "fonts"]
