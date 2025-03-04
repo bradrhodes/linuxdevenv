@@ -1,0 +1,29 @@
+---
+# Private configuration variables
+# Values that should be kept secret and encrypted with ansible-vault
+# Encrypt this file with: ansible-vault encrypt private-config.yml
+
+# Git configuration
+git_user:
+  name: "Your Name"
+  email: "your.email@example.com"
+  signing_key: ""  # Your GPG key ID for signing commits
+
+# SSH configuration
+ssh:
+  generate_key: true
+  key_type: "ed25519"
+  key_email: "your.email@example.com"
+  key_passphrase: ""  # Leave empty for no passphrase
+
+# GitHub configuration
+github:
+  upload_key: false  # Set to true to upload SSH key to GitHub
+  username: "yourusername"
+  access_token: ""  # GitHub personal access token
+
+# Dotfiles configuration
+dotfiles:
+  repo: "https://github.com/yourusername/dotfiles.git"
+  branch: "main"
+  apply: true
