@@ -8,11 +8,12 @@
 
 # Source the logging module
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+ROOT_DIR="$( cd "$SCRIPT_DIR/.." &> /dev/null && pwd )"
 source "$SCRIPT_DIR/logging.sh"
 
 # Default config file locations
-PUBLIC_CONFIG="public-config.yml"
-PRIVATE_CONFIG="private-config.yml"
+PUBLIC_CONFIG="$ROOT_DIR/config/public.yml"
+PRIVATE_CONFIG="$ROOT_DIR/config/private.yml"
 SOPS_ENABLED=false
 
 # Process command line arguments
@@ -142,4 +143,4 @@ export AWS_ACCESS_KEY=$(yq '.tokens.aws_access_key // ""' "$PRIVATE_CONFIG")
 export AWS_SECRET_KEY=$(yq '.tokens.aws_secret_key // ""' "$PRIVATE_CONFIG")
 
 log_success "Configuration loaded successfully"
-log_info "Run the setup script with: source load-config.sh && ./dev-env-setup.sh"
+log_info "Run the setup script with: source $SCRIPT_DIR/load-config.sh && ./dev-env-setup.sh"

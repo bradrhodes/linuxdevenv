@@ -14,6 +14,24 @@ This toolkit provides scripts to set up a comprehensive development environment 
 - SSH and Git configuration
 - Dotfiles management via Chezmoi
 
+## Directory Structure
+```
+/
+├── bootstrap.sh         # Installs prerequisites 
+├── age-key-setup.sh     # Sets up Age encryption
+├── manage-secrets.sh    # Manages encrypted configuration
+├── dev-env-setup.sh     # Main setup script (handles decryption)
+├── README.md
+├── config/
+│   ├── public.yml       # Public configuration
+│   ├── private.yml      # Encrypted private configuration
+│   ├── private.example.yml  # Template for private configuration
+│   └── .sops.yaml       # SOPS encryption configuration
+└── scripts/
+    ├── logging.sh       # Centralized logging module
+    └── load-config.sh   # Configuration loading script
+```
+
 ## Quick Start
 
 ### First-time Setup (Creating New Configuration)

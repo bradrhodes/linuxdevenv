@@ -5,62 +5,49 @@
 # This script sets up a complete development environment on Linux
 # including Nix, Fish shell, development tools, and configurations
 # for Neovim and TMUX.
+# It automatically loads and decrypts configuration.
 # =================================================================
 
-# ===== CONFIGURATION =====
-# Load configuration from environment variables or set defaults
-DOTFILES_REPO="${DOTFILES_REPO:-}"                           # Your dotfiles repository
-DEFAULT_SHELL="${DEFAULT_SHELL:-fish}"                       # Options: fish, bash, zsh, etc.
-INSTALL_NVCHAD="${INSTALL_NVCHAD:-true}"                     # Whether to install NvChad for Neovim
-INSTALL_TMUX_PLUGINS="${INSTALL_TMUX_PLUGINS:-true}"         # Whether to install TMUX plugins
-NERD_FONT="${NERD_FONT:-EnvyCodeR}"                          # Nerd Font to install
-STARSHIP_PRESET="${STARSHIP_PRESET:-pastel-powerline}"       # Starship prompt preset
-
-# Package lists
-NIX_PACKAGES_DEFAULT="nixpkgs#fish nixpkgs#fzf nixpkgs#nushell nixpkgs#ncdu nixpkgs#duckdb nixpkgs#mc nixpkgs#neovim nixpkgs#git nixpkgs#chezmoi nixpkgs#ripgrep nixpkgs#bat nixpkgs#htop nixpkgs#eza nixpkgs#fontconfig nixpkgs#unzip nixpkgs#gcc nixpkgs#thefuck"
-NIX_PACKAGES="${NIX_PACKAGES:-$NIX_PACKAGES_DEFAULT}"
-
-BREW_PACKAGES_DEFAULT="uv"
-BREW_PACKAGES="${BREW_PACKAGES:-$BREW_PACKAGES_DEFAULT}"
-
-APT_PACKAGES_DEFAULT="make"
-APT_PACKAGES="${APT_PACKAGES:-$APT_PACKAGES_DEFAULT}"
-
-PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
-PYTHON_TOOLS_DEFAULT="posting"
-PYTHON_TOOLS="${PYTHON_TOOLS:-$PYTHON_TOOLS_DEFAULT}"
-
-# ===== SCRIPT SETUP =====
 set -e  # Exit on error
 set -o pipefail  # Exit if any command in a pipe fails
 
-# Colors for output
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
+# Source the logging module
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source "$SCRIPT_DIR/scripts/logging.sh"
 
-# Helper functions
-log_info() {
-  echo -e "${GREEN}[INFO]${NC} $1"
-}
+# Configuration files
+PUBLIC_CONFIG="$SCRIPT_DIR/config/public.yml"
+PRIVATE_CONFIG="$SCRIPT_DIR/config/private.yml"
 
-log_warn() {
-  echo -e "${YELLOW}[WARNING]${NC} $1"
-}
+# Check if files exist
+if [ ! -f "$PUBLIC_CONFIG" ]; then
+  log_fatal "Public configuration file $PUBLIC_CONFIG not found."
+fi
 
-log_error() {
-  echo -e "${RED}[ERROR]${NC} $1"
-  exit 1
-}
+if [ ! -f "$PRIVATE_CONFIG" ]; then
+  log_fatal "Encrypted private configuration file $PRIVATE_CONFIG not found.
+Please run './manage-secrets.sh init' to create one."
+fi
 
-check_cmd() {
-  if command -v "$1" &> /dev/null; then
-    return 0
-  else
-    return 1
-  fi
-}
+# Load the configuration with SOPS decryption
+log_section "Loading Configuration"
+log_info "Loading configuration with SOPS decryption..."
+
+if ! source "$SCRIPT_DIR/scripts/load-config.sh" --public "$PUBLIC_CONFIG" --private "$PRIVATE_CONFIG" --sops; then
+  log_fatal "Failed to load configuration."
+fi
+
+log_success "Configuration loaded successfully"
+
+# ===== SCRIPT SETUP =====
+# Display loaded configuration
+log_section "Starting Development Environment Setup"
+log_info "Using configuration:"
+log_info "Default Shell: $DEFAULT_SHELL"
+log_info "Install NvChad: $INSTALL_NVCHAD"
+log_info "Install TMUX Plugins: $INSTALL_TMUX_PLUGINS"
+log_info "Nerd Font: $NERD_FONT"
+log_info "Starship Preset: $STARSHIP_PRESET"
 
 # Check if running as root (which we don't want)
 if [ "$(id -u)" -eq 0 ]; then
@@ -68,7 +55,7 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 
 # Check if sudo is available
-if ! check_cmd sudo; then
+if ! command -v sudo &> /dev/null; then
   log_error "sudo is required but not installed. Please install sudo first."
 fi
 
@@ -82,18 +69,10 @@ else
   log_warn "Unable to detect OS. This script is optimized for Ubuntu/Debian."
 fi
 
-# Display configuration
-log_info "Using configuration:"
-log_info "Dotfiles Repository: ${DOTFILES_REPO:-None}"
-log_info "Default Shell: $DEFAULT_SHELL"
-log_info "Install NvChad: $INSTALL_NVCHAD"
-log_info "Install TMUX Plugins: $INSTALL_TMUX_PLUGINS"
-log_info "Nerd Font: $NERD_FONT"
-log_info "Starship Preset: $STARSHIP_PRESET"
-
 # ===== NIX INSTALLATION =====
-log_info "Setting up Nix package manager..."
-if ! check_cmd nix; then
+log_section "Setting up Nix package manager"
+
+if ! command -v nix &> /dev/null; then
   log_info "Installing Nix..."
   curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
   
@@ -108,13 +87,13 @@ else
 fi
 
 # ===== NIX PACKAGES =====
-log_info "Installing packages via Nix..."
+log_section "Installing packages via Nix"
 log_info "Installing: $NIX_PACKAGES"
 nix profile install $NIX_PACKAGES
 
 # ===== UBUNTU SPECIFIC =====
-log_info "Installing Ubuntu-specific packages..."
-if check_cmd apt; then
+log_section "Installing Ubuntu-specific packages"
+if command -v apt &> /dev/null; then
   sudo apt update
   sudo apt install -y $APT_PACKAGES
 else
@@ -122,8 +101,8 @@ else
 fi
 
 # ===== HOMEBREW =====
-log_info "Setting up Homebrew..."
-if ! check_cmd brew; then
+log_section "Setting up Homebrew"
+if ! command -v brew &> /dev/null; then
   log_info "Installing Homebrew..."
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   
@@ -140,8 +119,8 @@ else
 fi
 
 # ===== BREW PACKAGES =====
-log_info "Installing packages via Homebrew..."
-if check_cmd brew; then
+log_section "Installing packages via Homebrew"
+if command -v brew &> /dev/null; then
   log_info "Installing: $BREW_PACKAGES"
   brew install $BREW_PACKAGES
 else
@@ -149,8 +128,8 @@ else
 fi
 
 # ===== PYTHON TOOLS =====
-log_info "Installing Python tools..."
-if check_cmd uv; then
+log_section "Installing Python tools"
+if command -v uv &> /dev/null; then
   log_info "Installing Python tools with uv: $PYTHON_TOOLS"
   uv tool install --python $PYTHON_VERSION $PYTHON_TOOLS
 else
@@ -158,10 +137,10 @@ else
 fi
 
 # ===== FISH SHELL SETUP =====
-log_info "Setting up shell environment..."
+log_section "Setting up shell environment"
 
 if [ "$DEFAULT_SHELL" = "fish" ]; then
-  if check_cmd fish; then
+  if command -v fish &> /dev/null; then
     # Add fish to available shells if not already there
     if ! grep -q "$(which fish)" /etc/shells; then
       echo "$(which fish)" | sudo tee -a /etc/shells
@@ -208,7 +187,7 @@ else
 fi
 
 # ===== FONTS =====
-log_info "Installing Nerd Fonts..."
+log_section "Installing Nerd Fonts"
 if [ -n "$NERD_FONT" ]; then
   mkdir -p ~/.fonts
   log_info "Downloading $NERD_FONT Nerd Font..."
@@ -222,8 +201,8 @@ else
 fi
 
 # ===== NEOVIM SETUP =====
-log_info "Setting up Neovim..."
-if check_cmd nvim; then
+log_section "Setting up Neovim"
+if command -v nvim &> /dev/null; then
   if [ "$INSTALL_NVCHAD" = true ]; then
     # Using NvChad
     if [ ! -d ~/.config/nvim ]; then
@@ -240,7 +219,7 @@ else
 fi
 
 # ===== TMUX SETUP =====
-log_info "Setting up TMUX..."
+log_section "Setting up TMUX"
 if [ "$INSTALL_TMUX_PLUGINS" = true ]; then
   if [ ! -d ~/.tmux/plugins/tpm ]; then
     mkdir -p ~/.tmux/plugins
@@ -281,8 +260,8 @@ else
 fi
 
 # ===== GIT CONFIGURATION =====
-log_info "Setting up Git configuration..."
-if check_cmd git; then
+log_section "Setting up Git configuration"
+if command -v git &> /dev/null; then
   # Configure Git user information if provided
   if [ -n "$GIT_USER_NAME" ]; then
     git config --global user.name "$GIT_USER_NAME"
@@ -304,7 +283,7 @@ else
 fi
 
 # ===== SSH CONFIGURATION =====
-log_info "Setting up SSH..."
+log_section "Setting up SSH"
 SSH_DIR="$HOME/.ssh"
 SSH_KEY="$SSH_DIR/id_${SSH_KEY_TYPE:-ed25519}"
 
@@ -360,7 +339,7 @@ fi
 
 # ===== GITHUB CONFIGURATION =====
 if [ "$GITHUB_UPLOAD_KEY" = true ] && [ -f "$SSH_KEY.pub" ]; then
-  log_info "Setting up GitHub SSH access..."
+  log_section "Setting up GitHub SSH access"
   
   if [ -n "$GITHUB_ACCESS_TOKEN" ] && [ -n "$GITHUB_USERNAME" ]; then
     log_info "Uploading SSH key to GitHub..."
@@ -412,8 +391,8 @@ else
 fi
 
 # ===== CHEZMOI DOTFILES =====
-log_info "Setting up dotfiles with chezmoi..."
-if check_cmd chezmoi; then
+log_section "Setting up dotfiles with chezmoi"
+if command -v chezmoi &> /dev/null; then
   if [ -n "$DOTFILES_REPO" ]; then
     log_info "Initializing chezmoi with repository: $DOTFILES_REPO"
     
@@ -451,7 +430,8 @@ else
 fi
 
 # ===== FINAL MESSAGE =====
-log_info "Development environment setup complete!"
+log_section "Setup Complete"
+log_success "Development environment setup complete!"
 log_info "You may need to log out and log back in for all changes to take effect."
 log_info "To complete Neovim setup, run: nvim"
 log_info "To install TMUX plugins, press prefix + I (capital I) in a TMUX session."

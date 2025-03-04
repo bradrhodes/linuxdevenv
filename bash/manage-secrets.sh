@@ -12,10 +12,11 @@ set -e  # Exit on error
 
 # Source the logging module
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-source "$SCRIPT_DIR/logging.sh"
+source "$SCRIPT_DIR/scripts/logging.sh"
 
 # Default file name - we only store the encrypted version
-PRIVATE_CONFIG="private.yml"
+PRIVATE_CONFIG="$SCRIPT_DIR/config/private.yml"
+PRIVATE_EXAMPLE="$SCRIPT_DIR/config/private.example.yml"
 
 # Check if a command exists
 check_cmd() {
@@ -74,8 +75,11 @@ validate_yaml() {
 
 # Function to initialize from example
 initialize() {
-  local example_file="private.example.yml"
+  local example_file=${PRIVATE_EXAMPLE}
   local output_file=${1:-$PRIVATE_CONFIG}
+  
+  # Ensure config directory exists
+  mkdir -p "$(dirname "$output_file")"
   
   if [ ! -f "$example_file" ]; then
     log_fatal "Example file $example_file does not exist."
@@ -104,18 +108,6 @@ initialize() {
   log_success "Encrypted file saved as $output_file"
 }
 
-# Function to run the setup with decryption on-the-fly
-run_setup() {
-  local config_file=${1:-$PRIVATE_CONFIG}
-  
-  if [ ! -f "$config_file" ]; then
-    log_fatal "Config file $config_file does not exist."
-  fi
-  
-  log_info "Running setup with encrypted configuration..."
-  ./load-config.sh --private "$config_file" --sops && ./dev-env-setup.sh
-}
-
 # Main logic based on command line arguments
 case "$1" in
   edit)
@@ -134,10 +126,6 @@ case "$1" in
     shift
     initialize "$@"
     ;;
-  setup)
-    shift
-    run_setup "$@"
-    ;;
   *)
     echo "Usage: $0 <command> [file]"
     echo
@@ -146,11 +134,13 @@ case "$1" in
     echo "  view [file]     - View the decrypted contents without saving to disk"
     echo "  validate [file] - Validate YAML syntax"
     echo "  init [file]     - Initialize from example file"
-    echo "  setup [file]    - Run the setup script with the encrypted configuration"
     echo
     echo "Default file: $PRIVATE_CONFIG"
     echo
     echo "Note: This tool never stores the unencrypted configuration on disk"
     echo "      (except temporarily during editing)"
+    echo
+    echo "To run the setup after managing secrets, use:"
+    echo "  ./dev-env-setup.sh"
     ;;
 esac

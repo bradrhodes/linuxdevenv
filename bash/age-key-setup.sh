@@ -10,10 +10,10 @@ set -e  # Exit on error
 
 # Source the logging module
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-source "$SCRIPT_DIR/logging.sh"
+source "$SCRIPT_DIR/scripts/logging.sh"
 
 AGE_KEY_FILE="$HOME/.age/keys.txt"
-SOPS_CONFIG_FILE=".sops.yaml"
+SOPS_CONFIG_FILE="$SCRIPT_DIR/config/.sops.yaml"
 
 # Check if age is installed
 check_age() {
@@ -75,6 +75,9 @@ extract_public_key() {
 update_sops_config() {
   log_section "Updating SOPS Configuration"
   
+  # Make sure config directory exists
+  mkdir -p "$(dirname "$SOPS_CONFIG_FILE")"
+  
   if [ -z "$PUBLIC_KEY" ]; then
     extract_public_key
   fi
@@ -92,7 +95,7 @@ update_sops_config() {
   cat > "$SOPS_CONFIG_FILE" << EOF
 creation_rules:
   # Encrypt with Age key
-  - path_regex: private.*\.ya?ml$
+  - path_regex: config/private.*\.ya?ml$
     age: >-
       $PUBLIC_KEY
 EOF
