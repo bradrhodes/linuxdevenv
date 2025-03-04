@@ -6,6 +6,10 @@
 # and exports variables for use in the main setup script.
 # =================================================================
 
+# Source the logging module
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source "$SCRIPT_DIR/logging.sh"
+
 # Default config file locations
 PUBLIC_CONFIG="public-config.yml"
 PRIVATE_CONFIG="private-config.yml"
@@ -27,8 +31,8 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     *)
-      echo "Unknown option: $1"
-      echo "Usage: $0 [--public PUBLIC_CONFIG] [--private PRIVATE_CONFIG] [--sops]"
+      log_error "Unknown option: $1"
+      log_info "Usage: $0 [--public PUBLIC_CONFIG] [--private PRIVATE_CONFIG] [--sops]"
       exit 1
       ;;
   esac
@@ -36,23 +40,18 @@ done
 
 # Check if the public config file exists
 if [ ! -f "$PUBLIC_CONFIG" ]; then
-  echo "Error: Public configuration file $PUBLIC_CONFIG not found."
-  exit 1
+  log_fatal "Public configuration file $PUBLIC_CONFIG not found."
 fi
 
 # Check if yq is installed
 if ! command -v yq &> /dev/null; then
-  echo "Error: yq is required but not installed."
-  echo "Please install it with: 'nix profile install nixpkgs#yq' or 'brew install yq'"
-  exit 1
+  log_fatal "yq is required but not installed.\nPlease install it with: 'nix profile install nixpkgs#yq' or 'brew install yq'"
 fi
 
 # Load SOPS if enabled
 if [ "$SOPS_ENABLED" = true ]; then
   if ! command -v sops &> /dev/null; then
-    echo "Error: sops is required for decryption but not installed."
-    echo "Please install it with: 'nix profile install nixpkgs#sops' or 'brew install sops'"
-    exit 1
+    log_fatal "sops is required for decryption but not installed.\nPlease install it with: 'nix profile install nixpkgs#sops' or 'brew install sops'"
   fi
   
   # Create a temporary file for the decrypted content
@@ -60,19 +59,19 @@ if [ "$SOPS_ENABLED" = true ]; then
   trap 'rm -f "$TEMP_PRIVATE_CONFIG"' EXIT
   
   # Decrypt the private config
-  echo "Decrypting private configuration with SOPS..."
+  log_info "Decrypting private configuration with SOPS..."
   sops --decrypt "$PRIVATE_CONFIG" > "$TEMP_PRIVATE_CONFIG"
   PRIVATE_CONFIG="$TEMP_PRIVATE_CONFIG"
 fi
 
 # Check if the private config file exists (after potential decryption)
 if [ ! -f "$PRIVATE_CONFIG" ]; then
-  echo "Error: Private configuration file $PRIVATE_CONFIG not found."
-  exit 1
+  log_fatal "Private configuration file $PRIVATE_CONFIG not found."
 fi
 
 # Load configuration into variables
-echo "Loading configuration from $PUBLIC_CONFIG and $PRIVATE_CONFIG..."
+log_section "Loading Configuration"
+log_info "Loading configuration from $PUBLIC_CONFIG and $PRIVATE_CONFIG..."
 
 # Core configuration from public config
 export DEFAULT_SHELL=$(yq '.default_shell' "$PUBLIC_CONFIG")
@@ -92,6 +91,29 @@ export PYTHON_VERSION=$(yq '.python_version' "$PUBLIC_CONFIG")
 export PYTHON_TOOLS=$(yq '.python_tools | join(" ")' "$PUBLIC_CONFIG")
 export TMUX_PREFIX=$(yq '.tmux_prefix' "$PUBLIC_CONFIG")
 export TMUX_PLUGINS=$(yq '.tmux_plugins | join(" ")' "$PUBLIC_CONFIG")
+
+# Load logging configuration
+log_level_value=$(yq '.log_level // "info"' "$PUBLIC_CONFIG")
+case "$log_level_value" in
+  debug)
+    export LOG_LEVEL=0
+    ;;
+  info)
+    export LOG_LEVEL=1
+    ;;
+  warn|warning)
+    export LOG_LEVEL=2
+    ;;
+  error)
+    export LOG_LEVEL=3
+    ;;
+  *)
+    log_warn "Unknown log level in config: $log_level_value, using 'info'"
+    export LOG_LEVEL=1
+    ;;
+esac
+
+log_debug "Log level set to: $log_level_value ($LOG_LEVEL)"
 
 # Git configuration from private config
 export GIT_USER_NAME=$(yq '.git_user.name' "$PRIVATE_CONFIG")
@@ -119,5 +141,5 @@ export NPM_TOKEN=$(yq '.tokens.npm // ""' "$PRIVATE_CONFIG")
 export AWS_ACCESS_KEY=$(yq '.tokens.aws_access_key // ""' "$PRIVATE_CONFIG")
 export AWS_SECRET_KEY=$(yq '.tokens.aws_secret_key // ""' "$PRIVATE_CONFIG")
 
-echo "Configuration loaded successfully."
-echo "Run the setup script with: source load-config.sh && ./dev-env-setup.sh"
+log_success "Configuration loaded successfully"
+log_info "Run the setup script with: source load-config.sh && ./dev-env-setup.sh"

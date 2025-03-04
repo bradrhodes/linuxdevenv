@@ -10,7 +10,7 @@
 # These are auto-detected but can be overridden here
 user: ""  # Leave empty to auto-detect (uses current user)
 home_dir: ""  # Leave empty to auto-detect (uses current user's home directory)
-debug_mode: false
+log_level: "info"
 
 # ===== CORE CONFIGURATION =====
 # Shell configuration
