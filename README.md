@@ -1,234 +1,124 @@
-# Linux Development Environment Setup
+# Linux Development Environment Setup Playbook
 
-This project provides automated scripts to set up a complete Linux development environment. It includes two implementation approaches:
+This Ansible playbook automates the setup of a complete Linux development environment with:
 
-1. **Bash Script**: A standalone shell script for direct execution
-2. **Ansible Playbook**: A more maintainable and modular approach using Ansible
+- Nix package manager
+- Shell configuration (Fish shell with plugins)
+- Git setup
+- SSH key management
+- Development tools
+- Editor configuration (Neovim with NvChad)
+- TMUX with plugins
+- Nerd Fonts
+- Dotfiles management with Chezmoi
 
-Both implementations support the same features and can be configured using YAML configuration files.
+## Requirements
 
-## Features
+- Ansible 2.9+
+- A Debian/Ubuntu-based Linux distribution (other distros may work but are not fully tested)
+- Internet connection
 
-- Nix package manager installation and package setup
-- Homebrew installation and package setup
-- Git configuration with user info and signing keys
-- SSH key generation and configuration
-- GitHub SSH key registration
-- Fish shell configuration with plugins
-- Neovim setup with NvChad
-- TMUX configuration with plugin manager
-- Nerd Font installation
-- Chezmoi dotfiles integration
-- Secure handling of sensitive information
+## Setup
 
-## Configuration Files
-
-The setup uses two separate configuration files:
-
-1. **Public Configuration**: Contains non-sensitive settings that can be committed to a public repository.
-2. **Private Configuration**: Contains sensitive information (SSH keys, tokens) that should be encrypted before being committed.
-
-All configuration options must be defined in these files - the scripts do not have default values and will fail if configuration files are missing.
-
-## Option 1: Using the Bash Script
-
-### Setup
-
-1. Copy the example configuration files:
-   ```bash
-   cp public-config.yml.example public-config.yml
-   cp private-config.yml.example private-config.yml
+1. Clone this repository:
+   ```
+   git clone https://github.com/yourusername/dev-setup.git
+   cd dev-setup
    ```
 
-2. Edit the configuration files to match your preferences:
-   ```bash
-   # Edit public configuration
-   nano public-config.yml
+2. Edit the configuration files:
+   - `group_vars/all/public.yml` - Non-sensitive configuration
+   - `group_vars/all/private.yml` - Sensitive configuration (encrypt with ansible-vault)
 
-   # Edit private configuration
-   nano private-config.yml
+3. Encrypt your private configuration:
    ```
-
-3. (Optional) Encrypt the private configuration file with SOPS:
-   ```bash
-   # Install SOPS if needed
-   brew install sops
-
-   # Encrypt the private configuration
-   sops -e -i private-config.yml
-   ```
-
-4. Run the setup script:
-   ```bash
-   # With unencrypted private config
-   ./load-config.sh --public public-config.yml --private private-config.yml
-   ./setup-dev-env.sh
-   
-   # With SOPS-encrypted private config
-   ./load-config.sh --public public-config.yml --private private-config.yml --sops
-   ./setup-dev-env.sh
-   ```
-
-### SOPS Encryption for Bash Script
-
-The `load-config.sh` script supports SOPS-encrypted private configuration files:
-
-```bash
-# Encrypt private config
-sops -e private-config.yml > private-config.enc.yml
-
-# Use encrypted config
-./load-config.sh --public public-config.yml --private private-config.enc.yml --sops
-```
-
-## Option 2: Using Ansible
-
-### Setup
-
-1. Create the required directory structure:
-   ```bash
-   mkdir -p group_vars/all
-   ```
-
-2. Copy the example configuration files:
-   ```bash
-   cp public.yml.example group_vars/all/public.yml
-   cp private.yml.example group_vars/all/private.yml
-   ```
-
-3. Edit the configuration files to match your preferences:
-   ```bash
-   # Edit public configuration
-   nano group_vars/all/public.yml
-
-   # Edit private configuration
-   nano group_vars/all/private.yml
-   ```
-
-4. Install Ansible if you haven't already:
-   ```bash
-   sudo apt update
-   sudo apt install -y ansible
-   ```
-
-5. (Optional) Encrypt the private configuration file:
-   ```bash
    ansible-vault encrypt group_vars/all/private.yml
    ```
 
-6. Run the playbook:
-   ```bash
-   # If your private configuration is not encrypted:
-   ansible-playbook -i inventory.ini dev-setup.yml --ask-become-pass
+## Usage
 
-   # If your private configuration is encrypted:
-   ansible-playbook -i inventory.ini dev-setup.yml --ask-vault-pass --ask-become-pass
-   ```
+### Two-Phase Installation (Recommended)
 
-### Advanced Ansible Usage
-
-#### Using a Different Configuration Location
-
-You can also use the `-e` flag to specify configuration files in different locations:
+For the best experience, run the setup in two phases with a terminal restart in between:
 
 ```bash
-ansible-playbook -i inventory.ini dev-setup.yml -e "@path/to/public.yml" -e "@path/to/private.yml" --ask-become-pass
+# Phase 1: Set up base environment (package managers, shell)
+ansible-playbook -i inventory.ini phase1-base.yml --ask-become-pass
+
+# Exit your terminal completely and open a new terminal
+
+# Phase 2: Install and configure tools
+ansible-playbook -i inventory.ini phase2-tools.yml --ask-become-pass
 ```
 
-#### Dry Run (Check Mode)
+This approach ensures that environment changes from Phase 1 (like new PATH entries) are properly loaded before running Phase 2.
 
-To perform a dry run without making changes:
+### All-in-One Installation
 
-```bash
-ansible-playbook -i inventory.ini dev-setup.yml --check --ask-become-pass
-```
-
-#### Running Specific Tasks with Tags
-
-```bash
-# Just set up Git and SSH
-ansible-playbook -i inventory.ini dev-setup.yml --tags "git,ssh" --ask-become-pass
-
-# Just install Homebrew packages
-ansible-playbook -i inventory.ini dev-setup.yml --tags "homebrew" --ask-become-pass
-
-# Just set up dotfiles
-ansible-playbook -i inventory.ini dev-setup.yml --tags "chezmoi,dotfiles" --ask-become-pass
-```
-
-### Ansible Vault for Encrypting Private Information
-
-Ansible Vault can be used to encrypt sensitive information. The recommended approach is to encrypt the entire private configuration file:
-
-```bash
-# Encrypt the entire file
-ansible-vault encrypt group_vars/all/private.yml
-
-# Edit the encrypted file later
-ansible-vault edit group_vars/all/private.yml
-
-# View contents without editing
-ansible-vault view group_vars/all/private.yml
-```
-
-When running the playbook with an encrypted file, provide the vault password:
-
-```bash
-ansible-playbook -i inventory.ini dev-setup.yml --ask-vault-pass --ask-become-pass
-```
-
-#### Using a Vault Password File
-
-Instead of typing the password each time, you can store it in a file:
-
-```bash
-# Create a vault password file
-echo "your_secure_password" > ~/.vault_pass.txt
-chmod 600 ~/.vault_pass.txt
-
-# Use the password file
-ansible-playbook -i inventory.ini dev-setup.yml --vault-password-file=~/.vault_pass.txt --ask-become-pass
-```
-
-You can also configure this in your `ansible.cfg` file:
-
-```ini
-[defaults]
-vault_password_file = ~/.vault_pass.txt
-```
-
-Then run the playbook without specifying the vault password file:
+You can also run everything in one command, but you might need to run it multiple times:
 
 ```bash
 ansible-playbook -i inventory.ini dev-setup.yml --ask-become-pass
 ```
 
-## Files in this Repository
+After running, exit your terminal, open a new one, and run it again to ensure all tools are properly installed.
 
-- **Configuration Templates**:
-  - `public-config.yml.example` / `public.yml.example`: Templates for non-sensitive configuration options
-  - `private-config.yml.example` / `private.yml.example`: Templates for sensitive configuration options
+### Running Specific Parts
 
-- **Bash Script Approach**:
-  - `setup-dev-env.sh`: Main bash script for environment setup
-  - `load-config.sh`: Helper script to load YAML configuration
+You can use tags to run specific parts of the playbook:
 
-- **Ansible Approach**:
-  - `dev-setup.yml`: Ansible playbook for environment setup
-  - `inventory.ini`: Ansible inventory file
+```
+ansible-playbook -i inventory.ini phase2-tools.yml --ask-become-pass --tags "git,ssh"
+```
 
-## Requirements
+Available tags:
+- `common` - Common system packages
+- `git` - Git configuration
+- `ssh` - SSH key management
+- `nix` - Nix package manager setup
+- `homebrew` - Homebrew package manager setup
+- `python` - Python tools setup
+- `shell` - Shell configuration
+- `editors` - Editor setup (Neovim)
+- `tmux` - TMUX setup
+- `fonts` - Nerd font installation
+- `dotfiles` - Dotfiles management with Chezmoi
+- `debug` - Debug tasks (add `-v` for verbose output)
 
-- A Debian/Ubuntu-based Linux distribution (some features may work on other distributions)
-- Sudo access
-- Internet connection
-- For Bash script: `yq` (required to parse YAML files) and `sops` (optional, for encrypting private configuration)
-- For Ansible: `ansible` installed on your system
+## Structure
 
-## Notes
+```
+.
+├── dev-setup.yml (wrapper playbook)
+├── phase1-base.yml (phase 1 - environment setup) 
+├── phase2-tools.yml (phase 2 - tools installation)
+├── tasks/
+│   └── load_config.yml (configuration loading)
+├── group_vars/
+│   └── all/
+│       ├── public.yml (non-sensitive configuration)
+│       └── private.yml (sensitive configuration)
+└── roles/
+    ├── common/ (system packages)
+    ├── git/ (git configuration)
+    ├── ssh/ (SSH key management)
+    ├── nix/ (Nix package manager)
+    ├── homebrew/ (Homebrew package manager)
+    ├── python/ (Python tools & utilities)
+    ├── shell/ (shell configuration)
+    ├── editors/ (Neovim setup)
+    ├── tmux/ (TMUX configuration)
+    ├── fonts/ (Nerd font installation)
+    └── dotfiles/ (dotfiles management)
+```
 
-- Both scripts will fail if configuration files are missing
-- Some features are Ubuntu/Debian specific and may not work on other distributions
-- You may need to log out and back in for shell changes to take effect
-- Ensure that SSH keys and GitHub API tokens have the correct permissions
-- The GitHub SSH integration requires an API token with appropriate scopes (typically `admin:public_key`)
+## Customization
+
+Customize your setup by editing the configuration files before running the playbook:
+
+- `public.yml` - Packages to install, shell plugins, etc.
+- `private.yml` - Git user info, SSH key settings, dotfiles repo URL
+
+## License
+
+MIT

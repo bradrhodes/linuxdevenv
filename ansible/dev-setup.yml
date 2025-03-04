@@ -1,57 +1,17 @@
 ---
 # Linux Development Environment Setup Playbook
-# This playbook automates the setup of a complete development environment
-# including Nix, Fish shell, development tools, and editor configurations
+# This is now a wrapper that runs both phases of the setup
+#
+# For a smoother experience, run the phases separately:
+#   1. ansible-playbook -i inventory.ini phase1-base.yml --ask-become-pass
+#   2. (exit and restart terminal)
+#   3. ansible-playbook -i inventory.ini phase2-tools.yml --ask-become-pass
 #
 # Usage with encrypted private config:
 #   ansible-playbook -i inventory.ini dev-setup.yml -e "@public-config.yml" -e "@private-config.yml" --ask-vault-pass
-#
-# Encryption instructions:
-#   ansible-vault encrypt private-config.yml
 
-- name: Setup Linux Development Environment
-  hosts: localhost
-  become: false  # Escalate privileges only when needed
-  gather_facts: true
+- name: Import Phase 1 - Base Environment
+  import_playbook: phase1-base.yml
 
-  pre_tasks:
-    - name: Load configuration files
-      include_tasks: tasks/load_config.yml
-      tags: ["always"]
-
-    - name: Set default user after configuration loading
-      set_fact:
-        user: "{{ user | default(ansible_user_id, true) }}"
-        home_dir: "{{ home_dir | default(ansible_env.HOME, true) }}"
-      tags: ["always"]
-
-  vars:
-    # Only environment variables that need to be determined at runtime
-    user: "{{ lookup('env', 'USER') | default(ansible_user_id, true) }}"
-    home_dir: "{{ lookup('env', 'HOME') | default(ansible_env.HOME, true) }}"
-    # debug_mode: false
-    # All other variables should be defined in configuration files or role defaults
-
-  roles:
-    - common
-    - git
-    - ssh
-    - nix
-    - homebrew
-    - python
-    - { role: shell, when: default_shell is defined and default_shell != "" }
-    - { role: editors, when: install_nvchad | default(false) }
-    - { role: tmux, when: install_tmux_plugins | default(false) }
-    - { role: fonts, when: nerd_font != "" }
-    - { role: dotfiles, when: dotfiles is defined and dotfiles.repo is defined and dotfiles.repo | length > 0 }
-
-  post_tasks:
-    - name: Display final message
-      debug:
-        msg: |
-          Development environment setup complete!
-          You may need to log out and log back in for all changes to take effect.
-          To complete Neovim setup, run: nvim
-          To install TMUX plugins, press prefix + I (capital I) in a TMUX session.
-        verbosity: 0
-      tags: ["always"]
+- name: Import Phase 2 - Tools and Configuration
+  import_playbook: phase2-tools.yml

@@ -1,0 +1,84 @@
+---
+# Phase 2: Tools and Configuration
+# This playbook installs and configures tools that depend on the base environment
+
+- name: Setup Linux Development Environment - Phase 2
+  hosts: localhost
+  become: false  # Escalate privileges only when needed
+  gather_facts: true
+
+  pre_tasks:
+    - name: Load configuration files
+      include_tasks: tasks/load_config.yml
+      tags: ["always"]
+
+    - name: Set default user after configuration loading
+      set_fact:
+        user: "{{ user | default(ansible_user_id, true) }}"
+        home_dir: "{{ home_dir | default(ansible_env.HOME, true) }}"
+      tags: ["always"]
+
+    - name: Verify environment is properly set up
+      shell: |
+        # Check if essential tools are available in PATH
+        missing=""
+        if [ -f /home/linuxbrew/.linuxbrew/bin/brew ]; then
+          export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+        elif ! command -v brew >/dev/null 2>&1; then
+          missing="$missing brew"
+        fi
+        
+        if [ -f /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then
+          source /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+        elif ! command -v nix >/dev/null 2>&1; then
+          missing="$missing nix"
+        fi
+        
+        if [ -n "$missing" ]; then
+          echo "ERROR: Required tools not in PATH:$missing"
+          echo "Make sure you opened a new terminal after running phase1-base.yml"
+          exit 1
+        fi
+        
+        echo "Environment verification successful"
+      args:
+        executable: /bin/bash
+      register: env_check
+      changed_when: false
+      failed_when: "'ERROR' in env_check.stdout"
+      tags: ["always"]
+
+  vars:
+    # Only environment variables that need to be determined at runtime
+    user: "{{ lookup('env', 'USER') | default(ansible_user_id, true) }}"
+    home_dir: "{{ lookup('env', 'HOME') | default(ansible_env.HOME, true) }}"
+    # All other variables should be defined in configuration files or role defaults
+
+  roles:
+    # Core tools and configurations
+    - git
+    - ssh
+    
+    # Programming languages and tools
+    - python
+    
+    # Editors and utilities
+    - { role: editors, when: install_nvchad | default(false) }
+    - { role: tmux, when: install_tmux_plugins | default(false) }
+    - { role: fonts, when: nerd_font != "" }
+    
+    # Finally, set up dotfiles if specified
+    - { role: dotfiles, when: dotfiles is defined and dotfiles.repo is defined and dotfiles.repo | length > 0 }
+
+  post_tasks:
+    - name: Display final message
+      debug:
+        msg: |
+          Development environment setup complete!
+          
+          You may need to exit your terminal once more and log back in for all changes to take effect.
+          
+          To complete Neovim setup, run: nvim
+          To install TMUX plugins, press prefix + I (capital I) in a TMUX session.
+        verbosity: 0
+      tags: ["always"]
