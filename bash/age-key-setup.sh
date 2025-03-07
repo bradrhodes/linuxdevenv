@@ -12,7 +12,8 @@ set -e  # Exit on error
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source "$SCRIPT_DIR/scripts/logging.sh"
 
-AGE_KEY_FILE="$HOME/.age/keys.txt"
+# Use SOPS' standard key location
+AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"
 SOPS_CONFIG_FILE="$SCRIPT_DIR/config/.sops.yaml"
 
 # Check if age is installed
@@ -23,7 +24,7 @@ check_age() {
   
   if ! command -v age-keygen &> /dev/null; then
     log_fatal "Age-keygen is not installed. Please run the bootstrap script first."
-  }
+  fi
   
   log_success "Age is installed"
 }
@@ -33,7 +34,7 @@ generate_key() {
   log_section "Generating Age Key"
   
   # Create directory if it doesn't exist
-  mkdir -p "$HOME/.age"
+  mkdir -p "$(dirname "$AGE_KEY_FILE")"
   
   # Check if key already exists
   if [ -f "$AGE_KEY_FILE" ]; then
@@ -110,7 +111,7 @@ export_key() {
   
   if [ ! -f "$AGE_KEY_FILE" ]; then
     log_fatal "Age key file not found at $AGE_KEY_FILE"
-  }
+  fi
   
   EXPORT_FILE="age-key-export.txt"
   
@@ -136,10 +137,10 @@ import_key() {
   
   if [ ! -f "$IMPORT_FILE" ]; then
     log_fatal "Import file not found: $IMPORT_FILE"
-  }
+  fi
   
   # Create directory if it doesn't exist
-  mkdir -p "$HOME/.age"
+  mkdir -p "$(dirname "$AGE_KEY_FILE")"
   
   # Check if key already exists
   if [ -f "$AGE_KEY_FILE" ]; then
@@ -181,7 +182,7 @@ setup_env_var() {
   
   if [ ! -f "$AGE_KEY_FILE" ]; then
     log_fatal "Age key file not found at $AGE_KEY_FILE"
-  }
+  fi
   
   # Check if SOPS_AGE_KEY_FILE is already in shell config
   SHELL_CONFIG=""

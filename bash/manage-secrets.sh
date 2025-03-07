@@ -73,6 +73,50 @@ validate_yaml() {
   fi
 }
 
+# Function to encrypt a file in-place
+encrypt_file() {
+  local file="$1"
+  
+  if [ ! -f "$file" ]; then
+    log_fatal "File $file does not exist."
+  fi
+  
+  log_info "Encrypting file: $file"
+  
+  # Make sure Age key environment variable is set
+  if [ -z "$SOPS_AGE_KEY_FILE" ]; then
+    export SOPS_AGE_KEY_FILE="$HOME/.age/keys.txt"
+    log_info "Setting SOPS_AGE_KEY_FILE to $SOPS_AGE_KEY_FILE"
+  fi
+  
+  # Check if the key file exists
+  if [ ! -f "$SOPS_AGE_KEY_FILE" ]; then
+    log_fatal "Age key file not found at $SOPS_AGE_KEY_FILE. Please run ./age-key-setup.sh first."
+  fi
+  
+  # Extract public key for encryption
+  PUBLIC_KEY=$(grep "public key:" "$SOPS_AGE_KEY_FILE" | cut -d: -f2 | tr -d ' ')
+  if [ -z "$PUBLIC_KEY" ]; then
+    log_fatal "Failed to extract public key from $SOPS_AGE_KEY_FILE"
+  fi
+  
+  # Create a temporary file for the encrypted content
+  TEMP_FILE=$(mktemp)
+  trap 'rm -f "$TEMP_FILE"' EXIT
+  
+  # Encrypt the file with explicit key
+  log_info "Using Age public key: $PUBLIC_KEY"
+  if sops --encrypt --age "$PUBLIC_KEY" "$file" > "$TEMP_FILE"; then
+    # Replace the original file with the encrypted version
+    mv "$TEMP_FILE" "$file"
+    log_success "File encrypted successfully: $file"
+  else
+    log_error "Encryption failed"
+    rm -f "$TEMP_FILE"
+    return 1
+  fi
+}
+
 # Function to initialize from example
 initialize() {
   local example_file=${PRIVATE_EXAMPLE}
@@ -126,6 +170,12 @@ case "$1" in
     shift
     initialize "$@"
     ;;
+  encrypt)
+    if [ -z "$2" ]; then
+      log_fatal "Please specify a file to encrypt: $0 encrypt <filename>"
+    fi
+    encrypt_file "$2"
+    ;;
   *)
     echo "Usage: $0 <command> [file]"
     echo
@@ -134,6 +184,7 @@ case "$1" in
     echo "  view [file]     - View the decrypted contents without saving to disk"
     echo "  validate [file] - Validate YAML syntax"
     echo "  init [file]     - Initialize from example file"
+    echo "  encrypt <file>  - Encrypt a file in-place (replaces plaintext with encrypted version)"
     echo
     echo "Default file: $PRIVATE_CONFIG"
     echo

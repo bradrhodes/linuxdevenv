@@ -168,6 +168,56 @@ The file should look like:
 # public key: age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 AGE-SECRET-KEY-1XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ```
+### Initial Encryption
+
+There are three ways to create your initial encrypted `private.yml` file:
+
+#### Option 1: Using manage-secrets.sh init (Recommended)
+
+This option creates a new file from the template and encrypts it automatically:
+
+```bash
+./manage-secrets.sh init
+```
+
+This will:
+1. Copy the template from `config/private.example.yml`
+2. Open it in your default editor
+3. Encrypt it when you save and exit
+
+#### Option 2: Using manage-secrets.sh encrypt
+
+If you've already created or edited a copy of the private configuration, you can encrypt it in-place:
+
+```bash
+# Ensure your Age key is set up first
+./age-key-setup.sh
+
+# Encrypt your file in-place (replaces the original with encrypted version)
+./manage-secrets.sh encrypt config/private.yml
+```
+
+This command will replace your plaintext file with an encrypted version using the same filename.
+
+#### Option 3: Manual Encryption with SOPS
+
+For more control over the encryption process:
+
+```bash
+# Ensure your Age key is set up first
+./age-key-setup.sh
+
+# Encrypt your existing file
+sops --encrypt config/private.yml.plain > config/private.yml
+
+# Optionally, securely delete the plaintext file
+shred -u config/private.yml.plain  # or simply: rm config/private.yml.plain
+```
+
+This approach is useful when:
+- You're migrating from an existing configuration
+- You've made extensive edits to a copy of the example file
+- You need full control over input and output filenames
 
 #### Working with Encrypted Configuration
 

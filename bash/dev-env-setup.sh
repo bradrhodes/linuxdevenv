@@ -105,17 +105,40 @@ log_section "Setting up Homebrew"
 if ! command -v brew &> /dev/null; then
   log_info "Installing Homebrew..."
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-  
-  # Add Homebrew to PATH (this varies based on shell and platform)
-  if [[ $(uname -m) == "x86_64" ]]; then
-    echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> "$HOME/.profile"
+else
+  log_info "Homebrew is already installed"
+fi
+
+# Always ensure Homebrew is in PATH
+if [[ $(uname -m) == "x86_64" ]]; then
+  # For Intel processors
+  if [ -f /home/linuxbrew/.linuxbrew/bin/brew ]; then
+    log_info "Adding Homebrew to PATH..."
     eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-  else
-    echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> "$HOME/.profile"
-    eval "$(/opt/homebrew/bin/brew shellenv)"
+    # Add to profile for persistence if not already there
+    if ! grep -q "brew shellenv" "$HOME/.profile"; then
+      echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> "$HOME/.profile"
+      log_info "Added Homebrew to ~/.profile for persistence"
+    fi
   fi
 else
-  log_info "Homebrew is already installed, skipping..."
+  # For Apple Silicon/ARM processors
+  if [ -f /opt/homebrew/bin/brew ]; then
+    log_info "Adding Homebrew to PATH..."
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+    # Add to profile for persistence if not already there
+    if ! grep -q "brew shellenv" "$HOME/.profile"; then
+      echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> "$HOME/.profile" 
+      log_info "Added Homebrew to ~/.profile for persistence"
+    fi
+  fi
+fi
+
+# Verify Homebrew is in PATH now
+if ! command -v brew &> /dev/null; then
+  log_error "Homebrew installation succeeded but it's not in PATH. Please run: eval \"\$($(find /home -name brew -type f 2>/dev/null | head -1) shellenv)\""
+else
+  log_success "Homebrew is properly configured in PATH"
 fi
 
 # ===== BREW PACKAGES =====
@@ -125,15 +148,6 @@ if command -v brew &> /dev/null; then
   brew install $BREW_PACKAGES
 else
   log_error "Homebrew not found in PATH. Installation failed or PATH not updated."
-fi
-
-# ===== PYTHON TOOLS =====
-log_section "Installing Python tools"
-if command -v uv &> /dev/null; then
-  log_info "Installing Python tools with uv: $PYTHON_TOOLS"
-  uv tool install --python $PYTHON_VERSION $PYTHON_TOOLS
-else
-  log_warn "uv not found. Skipping Python tools installation."
 fi
 
 # ===== FISH SHELL SETUP =====
@@ -149,6 +163,27 @@ if [ "$DEFAULT_SHELL" = "fish" ]; then
     # Change default shell to fish
     sudo chsh -s "$(which fish)" "$(whoami)"
     
+    # Create directories where we need to put things
+    mkdir -p ~/.local/bin
+    mkdir -p ~/.config/fish/conf.d/
+    
+    # Add ~/.local/bin to PATH if not already there
+    if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
+      export PATH="$HOME/.local/bin:$PATH"
+      # Also add to profile for persistence
+      echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.profile"
+    fi
+    
+    # Install Starship independently (non-interactive)
+    if ! command -v starship &> /dev/null; then
+      log_info "Installing Starship prompt..."
+      # Download and install without prompts
+      curl -sS https://starship.rs/install.sh | sh -s -- -y -b "$HOME/.local/bin"
+      log_success "Starship installed to $HOME/.local/bin"
+    else
+      log_info "Starship is already installed"
+    fi
+    
     # Setup Fish plugins and configuration
     fish -c "
       # Install Fisher (plugin manager) if not installed
@@ -163,17 +198,19 @@ if [ "$DEFAULT_SHELL" = "fish" ]; then
       fisher install jorgebucaran/autopair.fish
       fisher install jethrokuan/z
       
-      # Install Starship prompt if not installed
-      if not command -s starship
-        curl -sS https://starship.rs/install.sh | sh -s -- --bin-dir ~/.local/bin/
+      # Set up Starship config if starship is now available
+      if test -x $HOME/.local/bin/starship
+        echo 'Setting up Starship config...'
+        $HOME/.local/bin/starship preset $STARSHIP_PRESET > ~/.config/starship.toml
+        
+        # Add init to fish config if not already there
+        if not grep -q 'starship init' ~/.config/fish/config.fish
+          echo 'starship init fish | source' >> ~/.config/fish/config.fish
+        end
       end
-      
-      # Set up Starship config
-      starship preset $STARSHIP_PRESET > ~/.config/starship.toml
     "
     
     # Create Fish configuration to load Nix
-    mkdir -p ~/.config/fish/conf.d/
     echo "if test -e /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.fish
       source /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.fish
     end" > ~/.config/fish/conf.d/nix.fish
@@ -395,6 +432,21 @@ log_section "Setting up dotfiles with chezmoi"
 if command -v chezmoi &> /dev/null; then
   if [ -n "$DOTFILES_REPO" ]; then
     log_info "Initializing chezmoi with repository: $DOTFILES_REPO"
+    log_debug "Repository type: $(if [[ "$DOTFILES_REPO" == git@* ]]; then echo "SSH"; else echo "HTTPS"; fi)"
+    
+    # Handle SSH URLs properly
+    if [[ "$DOTFILES_REPO" == git@* ]]; then
+      # Ensure SSH agent is running and key is added
+      eval "$(ssh-agent -s)"
+      ssh-add "$SSH_KEY" 2>/dev/null || true
+      
+      # Test SSH connection to GitHub before proceeding
+      log_info "Testing SSH connection to GitHub..."
+      if ! ssh -T -o StrictHostKeyChecking=no git@github.com 2>&1 | grep -q "success"; then
+        log_warn "GitHub SSH connection test failed. Check your SSH setup."
+        log_info "Proceeding anyway with chezmoi initialization..."
+      fi
+    fi
     
     # Build the init command
     CHEZMOI_CMD="chezmoi init"
@@ -407,23 +459,23 @@ if command -v chezmoi &> /dev/null; then
     # Add the repository URL
     CHEZMOI_CMD="$CHEZMOI_CMD $DOTFILES_REPO"
     
+    log_debug "Running: $CHEZMOI_CMD"
+    
     # Execute the init command
-    eval "$CHEZMOI_CMD"
-    
-    # Apply if specified
-    if [ "$DOTFILES_APPLY" = true ]; then
-      log_info "Applying dotfiles with chezmoi..."
-      chezmoi apply
-    fi
-    
-    # Check if initialization was successful
-    if [ $? -eq 0 ]; then
-      log_info "Dotfiles successfully initialized with chezmoi"
+    if ! eval "$CHEZMOI_CMD"; then
+      log_error "Failed to initialize dotfiles with chezmoi. Check your repository URL and authentication."
+      log_info "To debug, try running: git clone $DOTFILES_REPO"
     else
-      log_error "Failed to initialize dotfiles with chezmoi"
+      # Apply if specified
+      if [ "$DOTFILES_APPLY" = true ]; then
+        log_info "Applying dotfiles with chezmoi..."
+        chezmoi apply
+      fi
+      
+      log_success "Dotfiles successfully initialized with chezmoi"
     fi
   else
-    log_info "No dotfiles repository specified, skipping dotfiles setup"
+    log_info "No dotfiles repository specified (DOTFILES_REPO is empty), skipping dotfiles setup"
   fi
 else
   log_error "Chezmoi not found after installation. Something went wrong."
