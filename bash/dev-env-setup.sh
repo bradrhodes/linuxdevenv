@@ -14,6 +14,29 @@ set -o pipefail  # Exit if any command in a pipe fails
 # Source the logging module
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
+# Extend sudo timeout for the duration of the script
+extend_sudo_timeout() {
+  # Check if sudo is available
+  if command -v sudo &> /dev/null; then
+    echo "This script requires sudo privileges for some operations."
+    echo "You will be prompted for your password once at the beginning."
+    echo "Sudo access will be maintained throughout the script."
+    
+    # Request sudo privileges and keep them alive
+    sudo -v
+    
+    # Keep sudo privileges alive in the background
+    (while true; do sudo -v; sleep 60; done) &
+    SUDO_KEEPALIVE_PID=$!
+    
+    # Trap to kill the sudo keep-alive process when the script exits
+    trap 'kill $SUDO_KEEPALIVE_PID' EXIT
+  fi
+}
+
+# Initialize sudo privileges at the beginning
+extend_sudo_timeout
+
 source "$SCRIPT_DIR/scripts/logging.sh"
 source "$SCRIPT_DIR/scripts/ssh-setup.sh"
 source "$SCRIPT_DIR/scripts/github-setup.sh"
