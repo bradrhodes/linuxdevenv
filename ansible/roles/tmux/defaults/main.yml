@@ -1,8 +1,0 @@
----
-install_tmux_plugins: true
-tmux_prefix: "C-a"
-tmux_plugins:
-  - "tmux-plugins/tpm"
-  - "tmux-plugins/tmux-sensible"
-  - "tmux-plugins/tmux-resurrect"
-  - "tmux-plugins/tmux-continuum"

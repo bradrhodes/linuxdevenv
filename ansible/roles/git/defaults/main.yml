@@ -1,6 +1,0 @@
----
-# Default Git configuration values
-git_user:
-  name: ""
-  email: ""
-  signing_key: ""
