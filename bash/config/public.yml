@@ -34,7 +34,6 @@ nix_packages:
   - "nixpkgs#duckdb"
   - "nixpkgs#mc"
   - "nixpkgs#neovim"
-  - "nixpkgs#git"
   - "nixpkgs#chezmoi"
   - "nixpkgs#ripgrep"
   - "nixpkgs#bat"
