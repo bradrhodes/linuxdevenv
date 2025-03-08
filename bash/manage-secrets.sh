@@ -413,20 +413,13 @@ rekey_config() {
     return 1
   fi
   
-  # Check if both files contain data (instead of exact matching)
-  if [ ! -s "$TEMP_VERIFY" ]; then
-    log_error "Verification failed, decrypted file is empty. Restoring original file and config."
+  # Verify content matches exactly
+  if ! diff -q "$TEMP_DECRYPTED" "$TEMP_VERIFY" > /dev/null; then
+    log_error "Verification failed, decrypted content doesn't match original. Restoring original file and config."
     mv "$PRIVATE_FILE.bak" "$PRIVATE_FILE"
     cat "$SOPS_CONFIG_BACKUP" > "$SOPS_CONFIG_FILE"
     rm -f "$TEMP_DECRYPTED" "$TEMP_VERIFY" "$PRIVATE_FILE.new" 2>/dev/null
     return 1
-  else
-    # Log the differences for debugging but continue anyway
-    if ! diff -q "$TEMP_DECRYPTED" "$TEMP_VERIFY" > /dev/null; then
-      log_warn "Note: Re-encrypted content has some differences from original."
-      log_warn "This is normal if SOPS adds metadata or changes formatting."
-      log_warn "Both files contain data, so encryption/decryption is working."
-    fi
   fi
   
   log_success "Verification successful - decryption works with the new configuration"
@@ -457,27 +450,156 @@ reencrypt_config() {
   log_info "After removing keys from .sops.yaml, re-encryption is necessary"
   log_info "This ensures the file can't be decrypted with removed keys"
   
+  # Make a backup of the encrypted file
+  cp "$PRIVATE_FILE" "$PRIVATE_FILE.bak"
+  log_info "Created backup of encrypted file"
+  
   # Decrypt the private.yml file to a temporary file
   log_info "Decrypting current file..."
   TEMP_DECRYPTED=$(mktemp)
   if ! sops --decrypt "$PRIVATE_FILE" > "$TEMP_DECRYPTED"; then
     log_error "Failed to decrypt $PRIVATE_FILE"
-    rm "$TEMP_DECRYPTED"
+    rm -f "$TEMP_DECRYPTED"
     return 1
   fi
   
-  # Re-encrypt with the updated key configuration from .sops.yaml
+  # Extract keys from the config file
+  CONFIG_FORMAT="list"  # Default to list format
+  EXISTING_KEYS=()
+  
+  # Determine format and extract keys
+  if grep -q "age:" "$SOPS_CONFIG_FILE"; then
+    # Check if it's a block scalar format
+    if grep -q "age:.*>" "$SOPS_CONFIG_FILE"; then
+      CONFIG_FORMAT="block"
+      # Extract keys from block scalar format
+      in_age_block=false
+      while IFS= read -r line; do
+        # Check if we're in the age block
+        if [[ "$line" =~ age:[[:space:]]*\> ]]; then
+          in_age_block=true
+          continue
+        fi
+        
+        # If we're in the age block and line starts with whitespace, it's likely a key
+        if [ "$in_age_block" = true ] && [[ "$line" =~ ^[[:space:]]+(age.*) ]]; then
+          key="${BASH_REMATCH[1]}"
+          # Remove any trailing commas
+          key="${key%,}"
+          EXISTING_KEYS+=("$key")
+        elif [ "$in_age_block" = true ] && [[ ! "$line" =~ ^[[:space:]] ]]; then
+          # If we were in the age block and hit a line that doesn't start with whitespace, we're done
+          in_age_block=false
+        fi
+      done < "$SOPS_CONFIG_FILE"
+    else
+      # Look for list format (with leading dash)
+      while IFS= read -r line; do
+        if [[ "$line" =~ ^[[:space:]]*-[[:space:]]+(age.*) ]]; then
+          key="${BASH_REMATCH[1]}"
+          EXISTING_KEYS+=("$key")
+        fi
+      done < "$SOPS_CONFIG_FILE"
+    fi
+  fi
+  
+  # Print the keys found (masked)
+  log_info "Found the following keys:"
+  for key in "${EXISTING_KEYS[@]}"; do
+    masked_key=$(mask_age_key "$key")
+    log_info "  - $masked_key"
+  done
+  
+  if [ ${#EXISTING_KEYS[@]} -eq 0 ]; then
+    log_error "No keys found in the config file. Cannot continue."
+    rm -f "$TEMP_DECRYPTED"
+    return 1
+  fi
+  
+  # Create a temporary config with a more permissive regex for the encryption
+  TEMP_CONFIG=$(mktemp)
+  {
+    echo "creation_rules:"
+    echo "  # Encrypt with Age key"
+    # Using a more permissive regex that will match any path
+    echo "  - path_regex: .*"
+    
+    if [ "$CONFIG_FORMAT" = "block" ]; then
+      # Use block scalar format
+      echo "    age: >-"
+      
+      # Add all existing keys with proper indentation (except last)
+      for ((i=0; i<${#EXISTING_KEYS[@]}-1; i++)); do
+        echo "      ${EXISTING_KEYS[i]},"
+      done
+      
+      # Add the last key without trailing comma
+      if [ ${#EXISTING_KEYS[@]} -gt 0 ]; then
+        echo "      ${EXISTING_KEYS[${#EXISTING_KEYS[@]}-1]}"
+      fi
+    else
+      # Use list format
+      echo "    age:"
+      
+      # Add all existing keys with proper indentation
+      for key in "${EXISTING_KEYS[@]}"; do
+        echo "      - $key"
+      done
+    fi
+  } > "$TEMP_CONFIG"
+  
+  # Generate a comma-separated list of keys for explicit encryption
+  ALL_KEYS=""
+  for ((i=0; i<${#EXISTING_KEYS[@]}; i++)); do
+    if [ -z "$ALL_KEYS" ]; then
+      ALL_KEYS="${EXISTING_KEYS[i]}"
+    else
+      ALL_KEYS="$ALL_KEYS,${EXISTING_KEYS[i]}"
+    fi
+  done
+  
+  # Re-encrypt with the updated key configuration
   log_info "Re-encrypting with current keys..."
-  if sops --input-type yaml --output-type yaml --encrypt "$TEMP_DECRYPTED" > "$PRIVATE_FILE"; then
-    log_success "File successfully re-encrypted with current keys"
-  else
-    log_error "Failed to re-encrypt the file"
-    rm "$TEMP_DECRYPTED"
+  ERROR_LOG=$(mktemp)
+  
+  log_info "Using config: $TEMP_CONFIG"
+  if ! SOPS_AGE_RECIPIENTS="$ALL_KEYS" sops --config "$TEMP_CONFIG" --input-type yaml --output-type yaml --encrypt "$TEMP_DECRYPTED" > "$PRIVATE_FILE.new" 2> "$ERROR_LOG"; then
+    log_error "Re-encryption failed."
+    log_error "--- Error details begin ---"
+    cat "$ERROR_LOG"
+    log_error "--- Error details end ---"
+    log_error "Restoring original file."
+    
+    mv "$PRIVATE_FILE.bak" "$PRIVATE_FILE"
+    rm -f "$TEMP_DECRYPTED" "$TEMP_CONFIG" "$PRIVATE_FILE.new" "$ERROR_LOG" 2>/dev/null
     return 1
   fi
   
-  # Clean up
-  rm "$TEMP_DECRYPTED"
+  # Move the new file into place
+  mv "$PRIVATE_FILE.new" "$PRIVATE_FILE"
+  
+  # Verify that the file can be properly decrypted
+  log_info "Verifying re-encryption..."
+  TEMP_VERIFY=$(mktemp)
+  if ! sops --decrypt "$PRIVATE_FILE" > "$TEMP_VERIFY"; then
+    log_error "Verification failed, cannot decrypt the re-encrypted file. Restoring original file."
+    mv "$PRIVATE_FILE.bak" "$PRIVATE_FILE"
+    rm -f "$TEMP_DECRYPTED" "$TEMP_VERIFY" "$TEMP_CONFIG" "$ERROR_LOG" 2>/dev/null
+    return 1
+  fi
+  
+  # Verify content matches
+  if ! diff -q "$TEMP_DECRYPTED" "$TEMP_VERIFY" > /dev/null; then
+    log_error "Verification failed, decrypted content doesn't match original. Restoring original file."
+    mv "$PRIVATE_FILE.bak" "$PRIVATE_FILE"
+    rm -f "$TEMP_DECRYPTED" "$TEMP_VERIFY" "$TEMP_CONFIG" "$ERROR_LOG" 2>/dev/null
+    return 1
+  fi
+  
+  log_success "Verification successful - decryption works with the new configuration"
+  
+  # Clean up all files
+  rm -f "$TEMP_DECRYPTED" "$TEMP_VERIFY" "$TEMP_CONFIG" "$ERROR_LOG" "$PRIVATE_FILE.bak" 2>/dev/null
   log_info "Temporary files cleaned up"
   
   log_success "The file has been re-encrypted and can only be decrypted with current keys"
