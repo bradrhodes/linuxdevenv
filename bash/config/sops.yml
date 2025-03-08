@@ -1,6 +1,0 @@
-creation_rules:
-  # Encrypt with Age key
-  - path_regex: private.*\.ya?ml$
-    age: >-
-      age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-    # Replace with your actual Age public key
