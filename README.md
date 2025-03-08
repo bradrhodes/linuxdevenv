@@ -2,6 +2,41 @@
 
 A complete solution for bootstrapping and configuring a Linux development environment with secure configuration management.
 
+## Table of Contents
+- [Overview](#overview)
+- [Directory Structure](#directory-structure)
+- [Quick Start](#quick-start)
+  - [First-time Setup (Creating New Configuration)](#first-time-setup-creating-new-configuration)
+  - [Additional Machine Setup (Using Existing Configuration)](#additional-machine-setup-using-existing-configuration)
+- [Setup Process](#setup-process)
+  - [1. Bootstrap](#1-bootstrap)
+  - [2. Age Key Setup](#2-age-key-setup)
+  - [3. Secret Management](#3-secret-management)
+    - [3.1 First-Time Setup (New Key)](#31-first-time-setup-new-key)
+    - [3.2 Using an Existing Key](#32-using-an-existing-key)
+    - [Initial Encryption](#initial-encryption)
+    - [Working with Encrypted Configuration](#working-with-encrypted-configuration)
+  - [4. Main Setup](#4-main-setup)
+- [Using Existing Encrypted Configuration](#using-existing-encrypted-configuration)
+- [Configuration Options](#configuration-options)
+  - [Public Configuration (public.yml)](#public-configuration-publicyml)
+  - [Private Configuration (private.yml)](#private-configuration-privateyml)
+- [Scripts](#scripts)
+  - [bootstrap.sh](#bootstrapsh)
+  - [age-key-setup.sh](#age-key-setupsh)
+  - [manage-secrets.sh](#manage-secretssh)
+  - [dev-env-setup.sh](#dev-env-setupsh)
+- [Logging](#logging)
+  - [Log Levels](#log-levels)
+- [Advanced Usage](#advanced-usage)
+  - [Adding Custom Tools](#adding-custom-tools)
+  - [Using with Dotfiles](#using-with-dotfiles)
+  - [Team Onboarding](#team-onboarding)
+- [Troubleshooting](#troubleshooting)
+- [Components](#components)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
+
 ## Overview
 
 This toolkit provides scripts to set up a comprehensive development environment on Linux systems. It includes:
@@ -54,8 +89,8 @@ chmod +x manage-secrets.sh
 ./manage-secrets.sh init
 
 # 5. Run the setup
-chmod +x setup.sh
-./setup.sh
+chmod +x dev-env-setup.sh
+./dev-env-setup.sh
 ```
 
 ### Additional Machine Setup (Using Existing Configuration)
@@ -76,8 +111,8 @@ chmod +x age-key-setup.sh
 ./age-key-setup.sh import /path/to/exported-key.txt
 
 # 4. Run the setup directly
-chmod +x setup.sh
-./setup.sh
+chmod +x dev-env-setup.sh
+./dev-env-setup.sh
 ```
 
 ## Setup Process
@@ -107,7 +142,7 @@ Before using SOPS, you need to set up an Age encryption key:
 ```
 
 This will:
-1. Generate a new Age key pair in `~/.age/keys.txt`
+1. Generate a new Age key pair in `~/.config/sops/age/keys.txt`
 2. Configure SOPS to use your Age public key
 3. Set up the necessary environment variables
 
@@ -149,7 +184,7 @@ Transfer this file to your new machine, then:
 
 The Age keys file has a specific format. On your original machine:
 ```bash
-cat ~/.age/keys.txt  # View and copy the content
+cat ~/.config/sops/age/keys.txt  # View and copy the content
 ```
 
 On your new machine:
@@ -158,7 +193,7 @@ On your new machine:
 vim age-key-export.txt  # Paste the exact content, preserving all lines
 chmod 600 age-key-export.txt
 
-# Import it with the script (which will move it to ~/.age/keys.txt)
+# Import it with the script (which will move it to ~/.config/sops/age/keys.txt)
 ./age-key-setup.sh import age-key-export.txt
 ```
 
@@ -232,9 +267,6 @@ The private configuration workflow is similar to ansible-vault - the unencrypted
 
 # Validate YAML syntax
 ./manage-secrets.sh validate
-
-# Run the setup directly
-./manage-secrets.sh setup
 ```
 
 ### 4. Main Setup
@@ -242,7 +274,7 @@ The private configuration workflow is similar to ansible-vault - the unencrypted
 Once prerequisites and secrets are configured, run the full setup:
 
 ```bash
-./setup.sh
+./dev-env-setup.sh
 ```
 
 This script:
@@ -291,7 +323,7 @@ You can now run the setup directly:
 
 ```bash
 # Run setup using the existing encrypted configuration
-./setup.sh
+./dev-env-setup.sh
 ```
 
 Or you can first verify that decryption works:
@@ -301,7 +333,7 @@ Or you can first verify that decryption works:
 ./manage-secrets.sh view
 
 # Then run setup
-./setup.sh
+./dev-env-setup.sh
 ```
 
 ## Configuration Options
@@ -344,6 +376,151 @@ git_user:
 dotfiles:
   repo: "https://github.com/yourusername/dotfiles.git"
 ```
+
+## Scripts
+
+### bootstrap.sh
+
+**Purpose:** Prepares your system by installing all prerequisite tools needed for the development environment setup.
+
+**Usage:**
+```bash
+./bootstrap.sh
+```
+
+**Description:**
+- Detects your system's package manager (apt, dnf, yum, pacman, zypper, brew)
+- Checks for required tools and installs any that are missing
+- Handles special cases for tools that might not be available in standard repositories
+- Creates the necessary directory structure for the setup
+
+**Options:** None (runs with default settings)
+
+### age-key-setup.sh
+
+**Purpose:** Generates, manages, and configures Age encryption keys for use with SOPS.
+
+**Usage:**
+```bash
+./age-key-setup.sh [command]
+```
+
+**Commands:**
+- `generate` - Generate a new Age key pair
+- `config` - Update SOPS config with existing key
+- `export` - Export key for use on another machine
+- `import FILE` - Import key from FILE
+- `env` - Setup environment variables
+- `help` - Show help message
+
+**Examples:**
+```bash
+# Generate a new key (default action if no command is provided)
+./age-key-setup.sh
+
+# Export your key to share with another machine
+./age-key-setup.sh export
+
+# Import a key from another machine
+./age-key-setup.sh import age-key-export.txt
+
+# Update SOPS configuration
+./age-key-setup.sh config
+
+# Set up environment variables
+./age-key-setup.sh env
+```
+
+### manage-secrets.sh
+
+**Purpose:** Manages encrypted configuration files using SOPS and Age.
+
+**Usage:**
+```bash
+./manage-secrets.sh <command> [file]
+```
+
+**Commands:**
+- `edit [file]` - Edit the encrypted file (creates if it doesn't exist)
+- `view [file]` - View the decrypted contents without saving to disk
+- `validate [file]` - Validate YAML syntax
+- `init [file]` - Initialize from example file
+- `encrypt <file>` - Encrypt a file in-place (replaces plaintext with encrypted version)
+- `rekey <key>` - Add a new public key and re-encrypt (for multi-machine setup)
+- `reencrypt` - Re-encrypt file after removing keys from .sops.yaml
+
+**Examples:**
+```bash
+# Create and configure a new private.yml from the template
+./manage-secrets.sh init
+
+# Edit an existing encrypted file
+./manage-secrets.sh edit config/private.yml
+
+# View the decrypted content without saving to disk
+./manage-secrets.sh view config/private.yml
+
+# Encrypt an existing file in-place
+./manage-secrets.sh encrypt config/private.yml
+
+# Validate the YAML syntax of an encrypted file
+./manage-secrets.sh validate config/private.yml
+
+# Add a new machine's public key and re-encrypt the file
+./manage-secrets.sh rekey "age1mefnflsca2xpx2lpf6a63dqy0cjyxgr6wtgdxa63ed0s8nfvce8qv7wa8u"
+
+# Re-encrypt after manually removing keys from .sops.yaml
+./manage-secrets.sh reencrypt
+```
+
+**Rekey Command Details:**
+
+The `rekey` command is particularly useful for multi-machine setups. It allows you to:
+1. Add a new Age public key to the `.sops.yaml` configuration file
+2. Re-encrypt the `private.yml` file so it can be decrypted using either the original key or the new key
+
+This eliminates the need to manually update configuration files when adding a new machine to your workflow. To use it:
+
+1. Generate a key on your new machine with `./age-key-setup.sh`
+2. Copy the public key output (starting with "age1...")
+3. On your original machine, run:
+   ```bash
+   ./manage-secrets.sh rekey "age1..."
+   ```
+4. Commit the updated `.sops.yaml` and `private.yml` files
+5. Pull changes on your new machine and proceed with setup
+
+**Reencrypt Command Details:**
+
+The `reencrypt` command is essential for security when removing access from machines. When you:
+
+1. Manually edit `.sops.yaml` to remove a public key
+2. Run `./manage-secrets.sh reencrypt` 
+
+This re-encrypts the file with only the remaining keys, ensuring that:
+- Machines with removed keys can no longer decrypt the configuration
+- The file is only accessible using currently listed keys
+- Any previous versions of the file in Git history cannot be decrypted with removed keys
+
+This is important for security when team members leave or when decommissioning machines that should no longer have access to sensitive configuration.
+
+### dev-env-setup.sh
+
+**Purpose:** Main setup script that configures your entire development environment.
+
+**Usage:**
+```bash
+./dev-env-setup.sh
+```
+
+**Description:**
+- Loads and decrypts your configuration files
+- Installs and configures all specified tools
+- Sets up shell environments, editors, and utilities
+- Configures SSH, Git, and other developer tools
+- Sets up dotfiles if specified
+
+**Options:** None (uses configuration from config files)
 
 ## Logging
 
@@ -437,7 +614,6 @@ If you encounter issues:
 * `age-key-setup.sh` - Sets up Age encryption keys
 * `manage-secrets.sh` - Manages encrypted private configuration
 * `load-config.sh` - Loads and processes configuration files
-* `setup.sh` - Wrapper that runs the main setup process
 * `dev-env-setup.sh` - Main setup script
 * `logging.sh` - Centralized logging module
 
