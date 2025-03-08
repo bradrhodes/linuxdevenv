@@ -220,6 +220,17 @@ setup_env_var() {
   log_success "SOPS_AGE_KEY_FILE set for current session"
 }
 
+# Initialize everything (generate + config + env)
+init_all() {
+  generate_key
+  update_sops_config
+  setup_env_var
+  
+  log_section "Next Steps"
+  log_info "You're all set up to use Age with SOPS!"
+  log_info "You can now run: ./manage-secrets.sh init"
+}
+
 # Print help
 show_help() {
   echo "Age Key Setup for SOPS"
@@ -227,6 +238,7 @@ show_help() {
   echo "Usage: ./age-key-setup.sh [command]"
   echo
   echo "Commands:"
+  echo "  init         Initialize everything (generate + config + env)"
   echo "  generate     Generate a new Age key pair"
   echo "  config       Update SOPS config with existing key"
   echo "  export       Export key for use on another machine"
@@ -234,7 +246,7 @@ show_help() {
   echo "  env          Setup environment variables"
   echo "  help         Show this help message"
   echo
-  echo "Without a command, runs generate + config + env"
+  echo "Without a command, shows this help message"
 }
 
 # Main function
@@ -242,16 +254,13 @@ main() {
   check_age
   
   if [ $# -eq 0 ]; then
-    # Default: run all steps
-    generate_key
-    update_sops_config
-    setup_env_var
-    
-    log_section "Next Steps"
-    log_info "You're all set up to use Age with SOPS!"
-    log_info "You can now run: ./manage-secrets.sh init"
+    # Default: show help
+    show_help
   else
     case "$1" in
+      init)
+        init_all
+        ;;
       generate)
         generate_key
         ;;
