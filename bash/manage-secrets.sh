@@ -17,6 +17,7 @@ source "$SCRIPT_DIR/scripts/logging.sh"
 # Default file name - we only store the encrypted version
 PRIVATE_CONFIG="$SCRIPT_DIR/config/private.yml"
 PRIVATE_EXAMPLE="$SCRIPT_DIR/config/private.example.yml"
+AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"
 
 # Check if a command exists
 check_cmd() {
@@ -96,7 +97,7 @@ encrypt_file() {
   
   # Make sure Age key environment variable is set
   if [ -z "$SOPS_AGE_KEY_FILE" ]; then
-    export SOPS_AGE_KEY_FILE="$HOME/.age/keys.txt"
+    export SOPS_AGE_KEY_FILE=$AGE_KEY_FILE
     log_info "Setting SOPS_AGE_KEY_FILE to $SOPS_AGE_KEY_FILE"
   fi
   
