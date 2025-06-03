@@ -54,11 +54,26 @@ setup_homebrew() {
   # ===== BREW PACKAGES =====
   log_section "Installing packages via Homebrew"
   if command -v brew &> /dev/null; then
+    # Check if BREW_PACKAGES is set and not empty
+    if [ -z "$BREW_PACKAGES" ]; then
+      log_info "No Homebrew packages specified, skipping installation"
+      return 0
+    fi
+    
     log_info "Installing: $BREW_PACKAGES"
-    # Use || true to prevent script termination if a package fails to install
-    brew install $BREW_PACKAGES || {
-      log_warn "Some Homebrew packages may not have installed correctly, but continuing with setup"
-    }
+    
+    # Convert the space-separated string to an array
+    read -ra packages <<< "$BREW_PACKAGES"
+    
+    # Install packages individually for better error handling
+    for package in "${packages[@]}"; do
+      log_info "Installing $package..."
+      if brew install "$package"; then
+        log_success "$package installed successfully"
+      else
+        log_warn "Failed to install $package, continuing..."
+      fi
+    done
   else
     log_warn "Homebrew not found in PATH. Package installation skipped."
     # Return 0 to continue the script instead of exiting

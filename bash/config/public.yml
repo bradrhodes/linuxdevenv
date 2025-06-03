@@ -42,7 +42,7 @@ nix_packages:
   - "nixpkgs#fontconfig"
   - "nixpkgs#unzip"
   - "nixpkgs#gcc"
-  - "nixpkgs#thefuck"
+  - "nixpkgs#pay-respects"
 
 # Homebrew packages to install
 brew_packages:
@@ -59,7 +59,7 @@ fish_plugins:
 # ===== UBUNTU SPECIFIC =====
 # Additional packages to install with apt
 apt_packages:
-  - "make"
+  - "build-essential"
 
 # ===== ADDITIONAL CONFIGURATION =====
 # Python tools

@@ -37,8 +37,27 @@ setup_nix() {
 
   # ===== NIX PACKAGES =====
   log_section "Installing packages via Nix"
+  
+  # Check if NIX_PACKAGES is set and not empty
+  if [ -z "$NIX_PACKAGES" ]; then
+    log_info "No Nix packages specified, skipping installation"
+    return 0
+  fi
+  
   log_info "Installing: $NIX_PACKAGES"
-  nix profile install $NIX_PACKAGES || {
-    log_warn "Some Nix packages failed to install, but continuing with setup"
-  }
+  
+  # Convert the space-separated string to an array
+  read -ra packages <<< "$NIX_PACKAGES"
+  
+  log_info "Parsed ${#packages[@]} packages to install"
+  
+  # Install packages individually for better error handling
+  for package in "${packages[@]}"; do
+    log_info "Installing individual package: $package"
+    if nix profile add "$package"; then
+      log_success "$package installed successfully"
+    else
+      log_warn "Failed to install $package, continuing..."
+    fi
+  done
 }

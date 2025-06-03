@@ -79,13 +79,14 @@ setup_linux_packages() {
 
   # Install each package individually for better error handling
   install_packages() {
-    local packages=($APT_PACKAGES)
+    local packages
+    eval "packages=($APT_PACKAGES)"
     local failed=0
     local installed=0
     
     for package in "${packages[@]}"; do
       log_info "Installing $package..."
-      if $SUDO $PKG_INSTALL $package; then
+      if $SUDO $PKG_INSTALL "$package"; then
         log_success "$package installed successfully"
         installed=$((installed + 1))
       else
@@ -127,7 +128,7 @@ setup_linux_packages() {
   fi
   
   # Try installing all packages at once first
-  if $SUDO $PKG_INSTALL $APT_PACKAGES; then
+  if eval "$SUDO $PKG_INSTALL $APT_PACKAGES"; then
     log_success "All packages installed successfully"
   else
     log_warn "Bulk package installation failed, trying packages individually..."

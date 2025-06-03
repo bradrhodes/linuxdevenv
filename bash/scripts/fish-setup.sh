@@ -5,14 +5,24 @@ setup_fish_shell() {
   log_section "Setting up shell environment"
 
   if [ "$DEFAULT_SHELL" = "fish" ]; then
+    # Try to find fish - check common Nix locations if not in PATH
+    fish_path=""
     if command -v fish &> /dev/null; then
+      fish_path=$(which fish)
+    elif [ -f "$HOME/.nix-profile/bin/fish" ]; then
+      fish_path="$HOME/.nix-profile/bin/fish"
+    elif [ -f "/nix/var/nix/profiles/default/bin/fish" ]; then
+      fish_path="/nix/var/nix/profiles/default/bin/fish"
+    fi
+    
+    if [ -n "$fish_path" ]; then
       # Add fish to available shells if not already there
-      if ! grep -q "$(which fish)" /etc/shells; then
-        echo "$(which fish)" | sudo tee -a /etc/shells
+      if ! grep -q "$fish_path" /etc/shells; then
+        echo "$fish_path" | sudo tee -a /etc/shells
       fi
       
       # Change default shell to fish
-      sudo chsh -s "$(which fish)" "$(whoami)"
+      sudo chsh -s "$fish_path" "$(whoami)"
       
       # Create directories where we need to put things
       mkdir -p ~/.local/bin
@@ -36,7 +46,7 @@ setup_fish_shell() {
       fi
       
       # Setup Fish plugins and configuration
-      fish -c "
+      "$fish_path" -c "
         # Install Fisher (plugin manager) if not installed
         if not functions -q fisher
           curl -sL https://git.io/fisher | source

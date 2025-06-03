@@ -75,26 +75,26 @@ log_section "Loading Configuration"
 log_info "Loading configuration from $PUBLIC_CONFIG and $PRIVATE_CONFIG..."
 
 # Core configuration from public config
-export DEFAULT_SHELL=$(yq '.default_shell' "$PUBLIC_CONFIG")
-export INSTALL_NVCHAD=$(yq '.install_nvchad' "$PUBLIC_CONFIG")
-export INSTALL_TMUX_PLUGINS=$(yq '.install_tmux_plugins' "$PUBLIC_CONFIG")
-export NERD_FONT=$(yq '.nerd_font' "$PUBLIC_CONFIG")
-export STARSHIP_PRESET=$(yq '.starship_preset' "$PUBLIC_CONFIG")
+export DEFAULT_SHELL=$(yq -r '.default_shell' "$PUBLIC_CONFIG")
+export INSTALL_NVCHAD=$(yq -r '.install_nvchad' "$PUBLIC_CONFIG")
+export INSTALL_TMUX_PLUGINS=$(yq -r '.install_tmux_plugins' "$PUBLIC_CONFIG")
+export NERD_FONT=$(yq -r '.nerd_font' "$PUBLIC_CONFIG")
+export STARSHIP_PRESET=$(yq -r '.starship_preset' "$PUBLIC_CONFIG")
 
 # Package lists from public config
-export NIX_PACKAGES=$(yq '.nix_packages | join(" ")' "$PUBLIC_CONFIG")
-export BREW_PACKAGES=$(yq '.brew_packages | join(" ")' "$PUBLIC_CONFIG")
-export FISH_PLUGINS=$(yq '.fish_plugins | join(" ")' "$PUBLIC_CONFIG")
-export APT_PACKAGES=$(yq '.apt_packages | join(" ")' "$PUBLIC_CONFIG")
+export NIX_PACKAGES=$(yq -r '.nix_packages | join(" ")' "$PUBLIC_CONFIG")
+export BREW_PACKAGES=$(yq -r '.brew_packages | join(" ")' "$PUBLIC_CONFIG")
+export FISH_PLUGINS=$(yq -r '.fish_plugins | join(" ")' "$PUBLIC_CONFIG")
+export APT_PACKAGES=$(yq -r '.apt_packages | join(" ")' "$PUBLIC_CONFIG")
 
 # Additional configuration from public config
-export PYTHON_VERSION=$(yq '.python_version' "$PUBLIC_CONFIG")
-export PYTHON_TOOLS=$(yq '.python_tools | join(" ")' "$PUBLIC_CONFIG")
-export TMUX_PREFIX=$(yq '.tmux_prefix' "$PUBLIC_CONFIG")
-export TMUX_PLUGINS=$(yq '.tmux_plugins | join(" ")' "$PUBLIC_CONFIG")
+export PYTHON_VERSION=$(yq -r '.python_version' "$PUBLIC_CONFIG")
+export PYTHON_TOOLS=$(yq -r '.python_tools | join(" ")' "$PUBLIC_CONFIG")
+export TMUX_PREFIX=$(yq -r '.tmux_prefix' "$PUBLIC_CONFIG")
+export TMUX_PLUGINS=$(yq -r '.tmux_plugins | join(" ")' "$PUBLIC_CONFIG")
 
 # Load logging configuration
-log_level_value=$(yq '.log_level // "info"' "$PUBLIC_CONFIG")
+log_level_value=$(yq -r '.log_level // "info"' "$PUBLIC_CONFIG")
 case "$log_level_value" in
   debug)
     export LOG_LEVEL=0
@@ -109,7 +109,7 @@ case "$log_level_value" in
     export LOG_LEVEL=3
     ;;
   *)
-    log_warn "Unknown log level in config: $log_level_value, using 'info'"
+    log_warn "Unknown log level in config: \"$log_level_value\", using 'info'"
     export LOG_LEVEL=1
     ;;
 esac
@@ -117,30 +117,30 @@ esac
 log_debug "Log level set to: $log_level_value ($LOG_LEVEL)"
 
 # Git configuration from private config
-export GIT_USER_NAME=$(yq '.git_user.name' "$PRIVATE_CONFIG")
-export GIT_USER_EMAIL=$(yq '.git_user.email' "$PRIVATE_CONFIG")
-export GIT_SIGNING_KEY=$(yq '.git_user.signing_key' "$PRIVATE_CONFIG")
+export GIT_USER_NAME=$(yq -r '.git_user.name' "$PRIVATE_CONFIG")
+export GIT_USER_EMAIL=$(yq -r '.git_user.email' "$PRIVATE_CONFIG")
+export GIT_SIGNING_KEY=$(yq -r '.git_user.signing_key' "$PRIVATE_CONFIG")
 
 # SSH configuration from private config
-export SSH_GENERATE_KEY=$(yq '.ssh.generate_key' "$PRIVATE_CONFIG")
-export SSH_KEY_TYPE=$(yq '.ssh.key_type' "$PRIVATE_CONFIG")
-export SSH_KEY_EMAIL=$(yq '.ssh.key_email' "$PRIVATE_CONFIG")
-export SSH_KEY_PASSPHRASE=$(yq '.ssh.key_passphrase' "$PRIVATE_CONFIG")
+export SSH_GENERATE_KEY=$(yq -r '.ssh.generate_key' "$PRIVATE_CONFIG")
+export SSH_KEY_TYPE=$(yq -r '.ssh.key_type' "$PRIVATE_CONFIG")
+export SSH_KEY_EMAIL=$(yq -r '.ssh.key_email' "$PRIVATE_CONFIG")
+export SSH_KEY_PASSPHRASE=$(yq -r '.ssh.key_passphrase' "$PRIVATE_CONFIG")
 
 # GitHub configuration from private config
-export GITHUB_USERNAME=$(yq '.github.username' "$PRIVATE_CONFIG")
-export GITHUB_UPLOAD_KEY=$(yq '.github.upload_key' "$PRIVATE_CONFIG")
-export GITHUB_ACCESS_TOKEN=$(yq '.github.access_token' "$PRIVATE_CONFIG")
+export GITHUB_USERNAME=$(yq -r '.github.username' "$PRIVATE_CONFIG")
+export GITHUB_UPLOAD_KEY=$(yq -r '.github.upload_key' "$PRIVATE_CONFIG")
+export GITHUB_ACCESS_TOKEN=$(yq -r '.github.access_token' "$PRIVATE_CONFIG")
 
 # Dotfiles configuration from private config
-export DOTFILES_REPO=$(yq '.dotfiles.repo' "$PRIVATE_CONFIG")
-export DOTFILES_BRANCH=$(yq '.dotfiles.branch' "$PRIVATE_CONFIG")
-export DOTFILES_APPLY=$(yq '.dotfiles.apply' "$PRIVATE_CONFIG")
+export DOTFILES_REPO=$(yq -r '.dotfiles.repo' "$PRIVATE_CONFIG")
+export DOTFILES_BRANCH=$(yq -r '.dotfiles.branch' "$PRIVATE_CONFIG")
+export DOTFILES_APPLY=$(yq -r '.dotfiles.apply' "$PRIVATE_CONFIG")
 
 # Load tokens if they exist
-export NPM_TOKEN=$(yq '.tokens.npm // ""' "$PRIVATE_CONFIG")
-export AWS_ACCESS_KEY=$(yq '.tokens.aws_access_key // ""' "$PRIVATE_CONFIG")
-export AWS_SECRET_KEY=$(yq '.tokens.aws_secret_key // ""' "$PRIVATE_CONFIG")
+export NPM_TOKEN=$(yq -r '.tokens.npm // ""' "$PRIVATE_CONFIG")
+export AWS_ACCESS_KEY=$(yq -r '.tokens.aws_access_key // ""' "$PRIVATE_CONFIG")
+export AWS_SECRET_KEY=$(yq -r '.tokens.aws_secret_key // ""' "$PRIVATE_CONFIG")
 
 log_success "Configuration loaded successfully"
 log_info "Run the setup script with: source $SCRIPT_DIR/load-config.sh && ./dev-env-setup.sh"

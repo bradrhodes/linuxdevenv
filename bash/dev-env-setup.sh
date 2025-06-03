@@ -30,7 +30,7 @@ extend_sudo_timeout() {
     SUDO_KEEPALIVE_PID=$!
     
     # Trap to kill the sudo keep-alive process when the script exits
-    trap 'kill $SUDO_KEEPALIVE_PID' EXIT
+    trap 'kill $SUDO_KEEPALIVE_PID 2>/dev/null || true' EXIT INT TERM
   fi
 }
 
@@ -147,3 +147,8 @@ log_info "To install TMUX plugins, press prefix + I (capital I) in a TMUX sessio
 
 # Notes about manual steps
 log_warn "Remember to manually set up spacemacs if needed."
+
+# Cleanup
+if [ -n "$SUDO_KEEPALIVE_PID" ]; then
+  kill $SUDO_KEEPALIVE_PID 2>/dev/null || true
+fi
