@@ -1,7 +1,8 @@
 creation_rules:
   # Encrypt with Age key
-  - path_regex: config/private.*\.ya?ml$
+  - path_regex: .*
     age: >-
-      age172unqujv5uv885spfc8gk7ztru9y2lc3jgr20s3gpt9lzhtt8gusgzusdn
-      age1nnza2w8tyapmnwm6gawae43j5nqxctqnqcy8xwe9n8czzcytxfmqd7m7fk
-      age1mamwyuqtaw9xw8l6hxvy8v7uqe3pd5p7a749jpl3sxvt5pvawa8sfw8vz2
+      age172unqujv5uv885spfc8gk7ztru9y2lc3jgr20s3gpt9lzhtt8gusgzusdn,
+      age1nnza2w8tyapmnwm6gawae43j5nqxctqnqcy8xwe9n8czzcytxfmqd7m7fk,
+      age1mamwyuqtaw9xw8l6hxvy8v7uqe3pd5p7a749jpl3sxvt5pvawa8sfw8vz2,
+      age1c20amhtxl5ddkedr3lm62fq7gn7fcwumlgl9rhq2h0uve69ykqnqw2n2yj

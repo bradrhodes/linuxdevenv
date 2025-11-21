@@ -28,6 +28,23 @@ check_cmd() {
   fi
 }
 
+# Validate yq is the Go-based version (not Python yq)
+validate_yq() {
+  if ! check_cmd yq; then
+    return 1
+  fi
+
+  # Go-based yq supports 'eval' command and outputs "yq (https://github.com/mikefarah/yq/)"
+  if yq --version 2>&1 | grep -q "mikefarah"; then
+    return 0
+  else
+    log_error "Found Python-based yq instead of required Go-based yq."
+    log_error "Please install the Go-based yq from: https://github.com/mikefarah/yq"
+    log_error "Or run: ./bootstrap.sh to install all required tools"
+    return 1
+  fi
+}
+
 # Helper function to mask Age keys for logging
 mask_age_key() {
   local key="$1"
@@ -158,9 +175,28 @@ initialize() {
   
   # Let the user edit the temp file with their preferred editor
   ${EDITOR:-vi} "$TEMP_FILE"
-  
+
   log_info "Creating encrypted file from edited content..."
-  if ! sops --input-type yaml --output-type yaml --encrypt "$TEMP_FILE" > "$output_file"; then
+
+  # Make sure Age key environment variable is set
+  if [ -z "$SOPS_AGE_KEY_FILE" ]; then
+    export SOPS_AGE_KEY_FILE=$AGE_KEY_FILE
+    log_info "Setting SOPS_AGE_KEY_FILE to $SOPS_AGE_KEY_FILE"
+  fi
+
+  # Check if the key file exists
+  if [ ! -f "$SOPS_AGE_KEY_FILE" ]; then
+    log_fatal "Age key file not found at $SOPS_AGE_KEY_FILE. Please run ./age-key-setup.sh first."
+  fi
+
+  # Extract public key for encryption
+  PUBLIC_KEY=$(grep "public key:" "$SOPS_AGE_KEY_FILE" | cut -d: -f2 | tr -d ' ')
+  if [ -z "$PUBLIC_KEY" ]; then
+    log_fatal "Failed to extract public key from $SOPS_AGE_KEY_FILE"
+  fi
+
+  log_info "Using Age public key: $PUBLIC_KEY"
+  if ! sops --input-type yaml --output-type yaml --encrypt --age "$PUBLIC_KEY" "$TEMP_FILE" > "$output_file"; then
     log_error "Encryption failed. Please check your SOPS configuration."
     rm -f "$TEMP_FILE"
     return 1
@@ -171,11 +207,16 @@ initialize() {
 # Function to add a new key and re-encrypt
 rekey_config() {
   log_section "Adding New Key & Re-encrypting"
-  
+
+  # Validate yq is the correct version
+  if ! validate_yq; then
+    log_fatal "yq validation failed. Cannot proceed with rekey."
+  fi
+
   if [ "$#" -ne 1 ]; then
     log_fatal "Please provide the new public key: $0 rekey <public_key>"
   fi
-  
+
   NEW_PUBLIC_KEY="$1"
   
   # Validate that we're getting an Age public key (basic validation)
@@ -239,7 +280,7 @@ rekey_config() {
           in_age_block=true
           continue
         fi
-        
+
         # If we're in the age block and line starts with whitespace, it's likely a key
         if [ "$in_age_block" = true ] && [[ "$line" =~ ^[[:space:]]+(age.*) ]]; then
           key="${BASH_REMATCH[1]}"
@@ -261,7 +302,7 @@ rekey_config() {
       done < "$SOPS_CONFIG_FILE"
     fi
   fi
-  
+
   # Create a safer .sops.yaml with a more lenient path regex
   {
     echo "creation_rules:"
@@ -435,7 +476,12 @@ rekey_config() {
 # Function to re-encrypt after manual key changes
 reencrypt_config() {
   log_section "Re-encrypting Configuration"
-  
+
+  # Validate yq is the correct version
+  if ! validate_yq; then
+    log_fatal "yq validation failed. Cannot proceed with reencrypt."
+  fi
+
   # Check if SOPS config exists
   SOPS_CONFIG_FILE="$SCRIPT_DIR/config/.sops.yaml"
   if [ ! -f "$SOPS_CONFIG_FILE" ]; then
@@ -467,7 +513,7 @@ reencrypt_config() {
   # Extract keys from the config file
   CONFIG_FORMAT="list"  # Default to list format
   EXISTING_KEYS=()
-  
+
   # Determine format and extract keys
   if grep -q "age:" "$SOPS_CONFIG_FILE"; then
     # Check if it's a block scalar format

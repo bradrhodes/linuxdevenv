@@ -59,9 +59,10 @@ MANUAL_INSTALL_INFO["sops,version"]="3.7.3"
 MANUAL_INSTALL_INFO["sops,url"]="https://github.com/mozilla/sops/releases/download/v${MANUAL_INSTALL_INFO["sops,version"]}/sops-v${MANUAL_INSTALL_INFO["sops,version"]}.linux.ARCH"
 MANUAL_INSTALL_INFO["sops,bin"]="sops"
 
-MANUAL_INSTALL_INFO["yq,version"]="4.34.1"
+MANUAL_INSTALL_INFO["yq,version"]="4.48.2"
 MANUAL_INSTALL_INFO["yq,url"]="https://github.com/mikefarah/yq/releases/download/v${MANUAL_INSTALL_INFO["yq,version"]}/yq_linux_ARCH"
 MANUAL_INSTALL_INFO["yq,bin"]="yq"
+MANUAL_INSTALL_INFO["yq,force_manual"]="true"  # Always use manual install for yq to get Go version
 
 MANUAL_INSTALL_INFO["age,version"]="1.1.1"
 MANUAL_INSTALL_INFO["age,url"]="https://github.com/FiloSottile/age/releases/download/v${MANUAL_INSTALL_INFO["age,version"]}/age-v${MANUAL_INSTALL_INFO["age,version"]}-linux-ARCH.tar.gz"
@@ -72,6 +73,22 @@ check_cmd() {
   if command -v "$1" &> /dev/null; then
     return 0
   else
+    return 1
+  fi
+}
+
+# Validate yq is the Go-based version (not Python yq)
+validate_yq() {
+  if ! check_cmd yq; then
+    return 1
+  fi
+
+  # Go-based yq supports --version and outputs "yq (https://github.com/mikefarah/yq/)"
+  # Python-based yq outputs just a version number
+  if yq --version 2>&1 | grep -q "mikefarah"; then
+    return 0
+  else
+    log_warn "Found Python-based yq instead of Go-based yq. Will reinstall."
     return 1
   fi
 }
@@ -144,16 +161,19 @@ setup_sudo() {
 install_tool() {
   local tool=$1
   local package=${PACKAGE_MAP[$tool]:-$tool}
-  
+
   log_info "Installing $tool..."
-  
-  # Try package manager first
-  if $SUDO $PKG_INSTALL $package; then
+
+  # Check if we should force manual installation (skip package manager)
+  local force_manual="${MANUAL_INSTALL_INFO[$tool,force_manual]}"
+
+  # Try package manager first (unless force_manual is set)
+  if [[ "$force_manual" != "true" ]] && $SUDO $PKG_INSTALL $package; then
     log_success "$tool installed successfully via package manager"
     return 0
   fi
-  
-  # If the package manager failed and we have manual install info, try that
+
+  # If the package manager failed/skipped and we have manual install info, try that
   if [[ -n "${MANUAL_INSTALL_INFO[$tool,url]}" ]]; then
     log_info "Trying manual installation for $tool..."
     
@@ -239,7 +259,15 @@ bootstrap() {
   
   # Check required tools
   for tool in "${REQUIRED_TOOLS[@]}"; do
-    if check_cmd "$tool"; then
+    # Special validation for yq to ensure it's the Go-based version
+    if [ "$tool" = "yq" ]; then
+      if validate_yq; then
+        log_success "$tool is already installed (Go-based version)"
+      else
+        log_info "$tool is missing or wrong version, will install"
+        required_missing=$((required_missing + 1))
+      fi
+    elif check_cmd "$tool"; then
       log_success "$tool is already installed"
     else
       log_info "$tool is missing, will install"
@@ -289,7 +317,18 @@ bootstrap() {
     
     local failed=0
     for tool in "${REQUIRED_TOOLS[@]}"; do
-      if ! check_cmd "$tool"; then
+      local needs_install=false
+
+      # Special validation for yq
+      if [ "$tool" = "yq" ]; then
+        if ! validate_yq; then
+          needs_install=true
+        fi
+      elif ! check_cmd "$tool"; then
+        needs_install=true
+      fi
+
+      if [ "$needs_install" = true ]; then
         if ! install_tool "$tool"; then
           failed=$((failed + 1))
         fi
@@ -316,9 +355,17 @@ bootstrap() {
   # Final verification
   log_section "Verification"
   local missing=0
-  
+
   for tool in "${REQUIRED_TOOLS[@]}"; do
-    if check_cmd "$tool"; then
+    # Special validation for yq
+    if [ "$tool" = "yq" ]; then
+      if validate_yq; then
+        log_success "$tool is installed and available (Go-based version)"
+      else
+        log_failure "$tool is still missing or wrong version"
+        missing=$((missing + 1))
+      fi
+    elif check_cmd "$tool"; then
       log_success "$tool is installed and available"
     else
       log_failure "$tool is still missing"
