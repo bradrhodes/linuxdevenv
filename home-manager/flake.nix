@@ -18,11 +18,8 @@
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
 
-      # Get username from environment or use a default
-      username = builtins.getEnv "USER";
-
       # Helper to create home-manager configuration
-      mkHome = username: home-manager.lib.homeManagerConfiguration {
+      mkHome = home-manager.lib.homeManagerConfiguration {
         inherit pkgs;
         modules = [
           ./home.nix
@@ -31,12 +28,10 @@
       };
     in
     {
+      # Use homeConfigurations without a username key
+      # home-manager will automatically use $USER
       homeConfigurations = {
-        # Dynamic username from $USER environment variable
-        ${username} = mkHome username;
-
-        # Fallback for explicit username specification
-        # Usage: home-manager switch --flake .#yourname
+        bigb = mkHome;
       };
     };
 }

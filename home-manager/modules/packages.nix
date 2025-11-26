@@ -11,7 +11,7 @@
     ncdu
     duckdb
     mc              # Midnight Commander
-    neovim
+    # neovim - managed via programs.neovim instead
     ripgrep
     bat
     htop

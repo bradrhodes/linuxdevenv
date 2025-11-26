@@ -14,7 +14,7 @@
           owner = "edc";
           repo = "bass";
           rev = "7aae6a85c24660422ea3f3f4629bb4a8d30df3ba";
-          sha256 = "sha256-fIvcg5TcZZEXCZT2YboyEqvWU1LjxgZvDfCrE8N3434=";
+          sha256 = "sha256-XpB8u2CcX7jkd+FT3AYJtGwBtmNcLXtfMyT/z7gfyQw=";
         };
       }
       # Z: directory jumper (tracks frecent directories)

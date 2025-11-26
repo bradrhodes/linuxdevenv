@@ -5,15 +5,8 @@
   programs.git = {
     enable = true;
 
-    # Git user configuration loaded from encrypted private.yml via SOPS
-    userName = builtins.readFile config.sops.secrets."git_user/name".path;
-    userEmail = builtins.readFile config.sops.secrets."git_user/email".path;
-
-    # Uncomment to enable GPG commit signing (if you have a signing key)
-    # signing = {
-    #   key = builtins.readFile config.sops.secrets."git_user/signing_key".path;
-    #   signByDefault = true;
-    # };
+    # NOTE: Git user config is set via activation script below using SOPS secrets
+    # This is because sops-nix decrypts secrets at activation time, not evaluation time
 
     extraConfig = {
       init.defaultBranch = "main";
@@ -42,4 +35,18 @@
       lg = "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit";
     };
   };
+
+  # Set git user config from SOPS secrets
+  # This runs after secrets are decrypted
+  home.activation.setGitConfig = config.lib.dag.entryAfter ["writeBoundary"] ''
+    if [ -f "${config.sops.secrets."git_user/name".path}" ] && [ -f "${config.sops.secrets."git_user/email".path}" ]; then
+      GIT_NAME=$(cat "${config.sops.secrets."git_user/name".path}")
+      GIT_EMAIL=$(cat "${config.sops.secrets."git_user/email".path}")
+      $DRY_RUN_CMD ${pkgs.git}/bin/git config --global user.name "$GIT_NAME"
+      $DRY_RUN_CMD ${pkgs.git}/bin/git config --global user.email "$GIT_EMAIL"
+      echo "Git user config set from SOPS secrets"
+    else
+      echo "Warning: Git user secrets not found, skipping git config setup"
+    fi
+  '';
 }
