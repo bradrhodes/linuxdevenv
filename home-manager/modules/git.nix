@@ -8,31 +8,30 @@
     # NOTE: Git user config is set via activation script below using SOPS secrets
     # This is because sops-nix decrypts secrets at activation time, not evaluation time
 
-    extraConfig = {
+    settings = {
       init.defaultBranch = "main";
       pull.rebase = true;
       core.editor = "nvim";
       color.ui = true;
-    };
 
-    # Git aliases - merged from your existing config + some useful additions
-    aliases = {
-      # Your existing aliases
-      logg = "log --abbrev-commit --decorate --oneline --graph";
-      la = "log --abbrev-commit --decorate --oneline --graph --all";
-      ss = "status -s";
-      open = "!start `git remote get-url origin`";
-      browse = "!git open";
-      aa = "add --all";
-      cm = "commit -m";
-      ignore = "!gi() { curl -sL https://www.gitignore.io/api/$@ ;}; gi";
+      alias = {
+        # Your existing aliases
+        logg = "log --abbrev-commit --decorate --oneline --graph";
+        la = "log --abbrev-commit --decorate --oneline --graph --all";
+        ss = "status -s";
+        open = "!start `git remote get-url origin`";
+        browse = "!git open";
+        aa = "add --all";
+        cm = "commit -m";
+        ignore = "!gi() { curl -sL https://www.gitignore.io/api/$@ ;}; gi";
 
-      # Additional useful aliases
-      st = "status";
-      co = "checkout";
-      br = "branch";
-      ci = "commit";
-      lg = "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit";
+        # Additional useful aliases
+        st = "status";
+        co = "checkout";
+        br = "branch";
+        ci = "commit";
+        lg = "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit";
+      };
     };
   };
 
