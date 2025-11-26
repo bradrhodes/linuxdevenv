@@ -3,8 +3,8 @@
 #ENC[AES256_GCM,data:gNRLRNpVhY6QGHupZD3DpJ6Dqa6+kNyd/w/A+aqIuKyBXa0SDqK22xGT01+0nYTpoHxlipjzcQWwHqLOU+oy6JM=,iv:SKKRZG5eDeuxQnZE7qTS4WQPUnvsPGu5X2iVafHwtZw=,tag:GFw0qFhAHGbckXXv1OJgkA==,type:comment]
 #ENC[AES256_GCM,data:qO4XzPH6q6DNDlSwOsoGRHaI,iv:1abmE8e/yf8ROXmakTY/0eBaVLWR4NCBZANzxTbBbJk=,tag:rb2g2AbAXQDnvyT1CfcMrg==,type:comment]
 git_user:
-    name: ""
-    email: ""
+    name: ENC[AES256_GCM,data:Bnw=,iv:ayWOiekYB+VrN8X9WRLmVS9pPvnHJQNGk1RFkYs+Xg8=,tag:0mw/yr0nnh6fwXl2+fVhYg==,type:str]
+    email: ENC[AES256_GCM,data:/lQNCcefG1FIm0UQVHFq4BOwgHIPiUyoULq9/lDDwfrD+0Ld6168U1lFCg==,iv:xqg/M5ZziPQZQHu9eNU6MSvurj02JYD53PmCNzv5SIk=,tag:xFvDVglB1h8rEWQLJXR3aw==,type:str]
     #ENC[AES256_GCM,data:o+88EmXsySXPS/Z0x+ZValre1ou91dygDqAl48IOfGJYUJct,iv:EbXimOvKyUryo22RsYaGLzOqg/lYpZHQigWDyelm3X0=,tag:VhUHTUT3tzpoDldt41Vc6g==,type:comment]
     signing_key: ""
 #ENC[AES256_GCM,data:nQjA963IUXHiDUxIOM82NcLn,iv:9kebcgp0seF2KrWwaeCd9qnrP0XlbhMgYj0rpGoRji8=,tag:sKdmjGeejO9PQgNNMLZ4EQ==,type:comment]
@@ -68,8 +68,8 @@ sops:
             V2RLQ2VqYXdDTXBLeFNteWhxeVU1OG8KWAghEReo6Z1ZnvywL7JjGciFEww7i7wz
             PMXj//BbBn4TlM4reoTFbOaXf8za/5dh2ll8nlTXyd4XiucS7sb+BQ==
             -----END AGE ENCRYPTED FILE-----
-    lastmodified: "2025-11-21T19:27:23Z"
-    mac: ENC[AES256_GCM,data:QsfzLypavAn/pNVKBc69iyKvLXDwRZBvxsAw8FbF+qZHzIubR0cGFuJgO93IU5+Kfs7AoxgCTfzX4YFzCJgBAYiz4uv5mkbUC/xYm/OdZrnaGlsgipeUki1jTHn40h5OxkSKaqbaWrHiFLGRfeUxuF5RYJUb+NzqYwfJ64YtFoA=,iv:V6u4TUU8oEiJE0Egm2RxyGW+/AQCrWjzDgciRBLhUqY=,tag:AUhRkkzbjQ7X6y/u98YJWg==,type:str]
+    lastmodified: "2025-11-26T22:04:59Z"
+    mac: ENC[AES256_GCM,data:mKX6qL4VGPMX2zONtQNfSiJwCtB+VbDR3/ngz+5lvnDesL/LVswT3rl04NGQSDr8QcfuyISG2C/giMqHHzaMauVUPrTwacY8QmVh8pxst0lOV3/5NgCHNQoZIh0M8r1S7kzH4daTM5eLKhUaKe1PWYKjxJsXvpVWuF/IF+wdZLg=,iv:uGaRRD1jNA3ytZnrcTsweB/h5bZRsBjqyGXVYvP5arE=,tag:TDOP1eMgTTtYLT3Mo83ElA==,type:str]
     pgp: []
     unencrypted_suffix: _unencrypted
     version: 3.7.3
