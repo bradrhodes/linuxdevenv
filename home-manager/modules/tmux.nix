@@ -15,33 +15,14 @@
       continuum     # Automatic session save/restore
       {
         plugin = resurrect;
-        extraConfig = ''
-          set -g @resurrect-strategy-nvim 'session'
-          set -g @resurrect-capture-pane-contents 'on'
-        '';
+        extraConfig = builtins.readFile ../dotfiles/tmux/resurrect.conf;
       }
       {
         plugin = continuum;
-        extraConfig = ''
-          set -g @continuum-restore 'on'
-          set -g @continuum-save-interval '15'
-        '';
+        extraConfig = builtins.readFile ../dotfiles/tmux/continuum.conf;
       }
     ];
 
-    extraConfig = ''
-      # Enable mouse support
-      set -g mouse on
-
-      # Start windows and panes at 1, not 0
-      set -g base-index 1
-      set -g pane-base-index 1
-      set-window-option -g pane-base-index 1
-      set-option -g renumber-windows on
-
-      # Better split commands
-      bind | split-window -h -c "#{pane_current_path}"
-      bind - split-window -v -c "#{pane_current_path}"
-    '';
+    extraConfig = builtins.readFile ../dotfiles/tmux/tmux.conf;
   };
 }

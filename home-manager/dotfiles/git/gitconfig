@@ -1,0 +1,29 @@
+[include]
+  path = ~/.gitconfig.local
+
+[init]
+  defaultBranch = main
+
+[pull]
+  rebase = true
+
+[core]
+  editor = nvim
+
+[color]
+  ui = true
+
+[alias]
+  logg = log --abbrev-commit --decorate --oneline --graph
+  la = log --abbrev-commit --decorate --oneline --graph --all
+  ss = status -s
+  open = "!start `git remote get-url origin`"
+  browse = "!git open"
+  aa = add --all
+  cm = commit -m
+  ignore = "!gi() { curl -sL https://www.gitignore.io/api/$@ ;}; gi"
+  st = status
+  co = checkout
+  br = branch
+  ci = commit
+  lg = "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
