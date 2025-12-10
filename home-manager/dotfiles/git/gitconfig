@@ -14,8 +14,8 @@
   ui = true
 
 [alias]
-  logg = log --abbrev-commit --decorate --oneline --graph
-  la = log --abbrev-commit --decorate --oneline --graph --all
+  logg = log --abbrev-commit --decorate --oneline --graph -20
+  la = log --abbrev-commit --decorate --oneline --graph --all -20
   ss = status -s
   open = "!start `git remote get-url origin`"
   browse = "!git open"
@@ -27,3 +27,4 @@
   br = branch
   ci = commit
   lg = "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
+  aac = !git add --all && git commit -m
