@@ -15,8 +15,8 @@ if test -f /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.fish
   source /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.fish
 end
 
-# Source /etc/profile via bass
-bass source /etc/profile
+# Source /etc/profile via bass (commented out - not needed with Nix environment)
+# bass source /etc/profile
 
 # Initialize Homebrew if available
 if test -d /home/linuxbrew/.linuxbrew

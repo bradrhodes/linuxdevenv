@@ -65,7 +65,7 @@ log_success "Private config found at $PRIVATE_CONFIG"
 
 # ===== BOOTSTRAP WORKFLOW FOR NEW MACHINES =====
 if [ "$BOOTSTRAP_NEEDED" = true ]; then
-    log_section "New Machine Setup"
+    log_info "New Machine Setup"
 
     echo "This machine needs an Age key to decrypt secrets."
     echo "You'll need your master bootstrap key from 1Password."
@@ -190,8 +190,34 @@ fi
 # Warn if Git credentials might not be set
 log_info "Checking Git credentials in private.yml..."
 if command -v sops &> /dev/null; then
+    # Check if we can decrypt the private config
+    if ! SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" sops -d "$PRIVATE_CONFIG" > /dev/null 2>&1; then
+        log_error "Cannot decrypt $PRIVATE_CONFIG"
+        echo ""
+        echo "The Age key at $AGE_KEY_FILE is not authorized to decrypt private.yml"
+        echo ""
+        echo "To decrypt, you need the private key matching one of the public keys in:"
+        echo "  bash/config/.sops.yaml"
+        echo ""
+        echo "Authorized public keys:"
+        grep "age1" "$SOPS_CONFIG" | sed 's/,$//' | sed 's/^[[:space:]]*/  - /'
+        echo ""
+        echo "Options to fix this:"
+        echo ""
+        echo "1. If you have a bootstrap/master key from 1Password:"
+        echo "   - Delete the current key: rm $AGE_KEY_FILE"
+        echo "   - Re-run this script and paste the bootstrap key when prompted"
+        echo ""
+        echo "2. If this machine's key should be added to .sops.yaml:"
+        echo "   - Your current public key is: \$(age-keygen -y $AGE_KEY_FILE)"
+        echo "   - Add it to bash/config/.sops.yaml under the age: section"
+        echo "   - Rekey: SOPS_AGE_KEY_FILE=<bootstrap-key> sops updatekeys bash/config/private.yml"
+        echo ""
+        exit 1
+    fi
+
     # Try to check if git user name is empty
-    GIT_NAME=$(sops -d "$PRIVATE_CONFIG" 2>/dev/null | grep -A1 "git_user:" | grep "name:" | cut -d'"' -f2)
+    GIT_NAME=$(SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" sops -d "$PRIVATE_CONFIG" 2>/dev/null | grep -A1 "git_user:" | grep "name:" | cut -d'"' -f2)
     if [ -z "$GIT_NAME" ] || [ "$GIT_NAME" = "" ]; then
         log_warn "Git user name appears to be empty in private.yml"
         log_info "Edit it with: cd ../bash && ./manage-secrets.sh edit config/private.yml"
@@ -237,11 +263,20 @@ nix run home-manager/master -- switch --flake .
 log_success "Home Manager configuration activated!"
 
 # Check if Fish is the default shell
-if [ "$SHELL" != "$(which fish 2>/dev/null)" ]; then
+FISH_PATH=$(which fish 2>/dev/null)
+if [ -n "$FISH_PATH" ] && [ "$SHELL" != "$FISH_PATH" ]; then
     log_warn "Fish shell is installed but not set as your default shell."
     echo ""
+
+    # Check if fish is in /etc/shells
+    if ! grep -q "^${FISH_PATH}$" /etc/shells; then
+        log_warn "Fish is not in /etc/shells. Adding it now..."
+        echo "$FISH_PATH" | sudo tee -a /etc/shells > /dev/null
+        log_success "Added $FISH_PATH to /etc/shells"
+    fi
+
     echo "To set Fish as your default shell, run:"
-    echo "  sudo chsh -s \$(which fish) \$USER"
+    echo "  sudo chsh -s $FISH_PATH \$USER"
     echo ""
 fi
 
@@ -250,7 +285,7 @@ echo ""
 log_info "Important next steps:"
 echo ""
 echo "1. Set Fish as default shell (if you haven't already):"
-echo "   sudo chsh -s \$(which fish) \$USER"
+echo "   sudo chsh -s $FISH_PATH \$USER"
 echo ""
 echo "2. Git Configuration:"
 echo "   ✅ Your Git user.name and user.email are automatically loaded from private.yml"
