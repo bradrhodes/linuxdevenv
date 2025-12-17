@@ -32,6 +32,18 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Source Nix if it exists but isn't in PATH
+if ! command -v nix &> /dev/null; then
+    # Try to source Nix from common locations
+    # Need to unset the guard variable to allow sourcing
+    unset __ETC_PROFILE_NIX_SOURCED
+    if [ -f "/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh" ]; then
+        . "/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh"
+    elif [ -f "$HOME/.nix-profile/etc/profile.d/nix.sh" ]; then
+        . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+    fi
+fi
+
 # Check if running in the correct directory
 if [ ! -f "flake.nix" ]; then
     log_error "flake.nix not found. Please run this script from the home-manager directory."
@@ -84,45 +96,84 @@ if [ "$BOOTSTRAP_NEEDED" = true ]; then
     IFS= read -rs bootstrap_key
     echo "$bootstrap_key" > "$BOOTSTRAP_KEY_FILE"
 
-    # Verify the bootstrap key can decrypt
+    log_info "DEBUG: Bootstrap key file created at $BOOTSTRAP_KEY_FILE"
+    log_info "DEBUG: Key starts with: $(head -c 20 "$BOOTSTRAP_KEY_FILE")..."
+    log_info "DEBUG: Key length: $(wc -c < "$BOOTSTRAP_KEY_FILE") bytes"
+
+    # Install required tools if needed
+    log_info "Checking for required tools..."
+
+    if ! command -v sops &> /dev/null || ! command -v age-keygen &> /dev/null; then
+        # Need to install tools - check for Nix
+        if ! command -v nix &> /dev/null; then
+            log_warn "Nix is not installed. Installing Nix first..."
+            curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install --no-confirm
+
+            # Source Nix
+            unset __ETC_PROFILE_NIX_SOURCED
+            if [ -f "/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh" ]; then
+                . "/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh"
+            fi
+            log_success "Nix installed successfully"
+        fi
+
+        # No need to install - we'll use nix-shell to run tools temporarily
+        log_info "Tools will be loaded temporarily via nix-shell"
+    fi
+
+    # Verify the bootstrap key can decrypt (using nix-shell for sops)
     log_info "Verifying bootstrap key..."
-    if ! SOPS_AGE_KEY_FILE="$BOOTSTRAP_KEY_FILE" sops -d "$PRIVATE_CONFIG" > /dev/null 2>&1; then
+    log_info "DEBUG: SOPS_AGE_KEY_FILE=$BOOTSTRAP_KEY_FILE"
+    log_info "DEBUG: PRIVATE_CONFIG=$PRIVATE_CONFIG"
+
+    # Try decryption with error output
+    if ! SOPS_AGE_KEY_FILE="$BOOTSTRAP_KEY_FILE" nix-shell -p sops --run "sops -d $PRIVATE_CONFIG" > /dev/null 2>&1; then
         log_error "Bootstrap key cannot decrypt private.yml"
+        log_error "DEBUG: Running sops with error output:"
+        SOPS_AGE_KEY_FILE="$BOOTSTRAP_KEY_FILE" nix-shell -p sops --run "sops -d $PRIVATE_CONFIG" 2>&1 | head -20
         log_info "Make sure you pasted the correct private key (starts with AGE-SECRET-KEY-)"
         exit 1
     fi
     log_success "Bootstrap key verified!"
 
-    # Generate machine-specific key
+    # Generate machine-specific key to temporary location first (using nix-shell for age)
     log_info "Generating machine-specific Age key..."
-    mkdir -p "$(dirname "$AGE_KEY_FILE")"
+    TEMP_MACHINE_KEY="/tmp/age-machine-key-$$.tmp"
+    rm -f "$TEMP_MACHINE_KEY"  # Remove if it exists from a previous run
 
-    if ! command -v age-keygen &> /dev/null; then
-        log_error "age-keygen not found. Installing age..."
-        nix profile install nixpkgs#age
+    nix-shell -p age --run "age-keygen -o $TEMP_MACHINE_KEY" 2>&1 | tee /tmp/age-keygen-output.txt
+    chmod 600 "$TEMP_MACHINE_KEY"
+    log_info "DEBUG: age-keygen completed"
+
+    # Extract the public key (case-insensitive grep)
+    MACHINE_PUBLIC_KEY=$(grep -i "public key:" /tmp/age-keygen-output.txt | cut -d: -f2 | xargs)
+    log_info "DEBUG: Extracted public key: $MACHINE_PUBLIC_KEY"
+
+    if [ -z "$MACHINE_PUBLIC_KEY" ]; then
+        log_error "Failed to extract public key from age-keygen output"
+        log_error "Contents of /tmp/age-keygen-output.txt:"
+        cat /tmp/age-keygen-output.txt
+        exit 1
     fi
 
-    age-keygen -o "$AGE_KEY_FILE" 2>&1 | tee /tmp/age-keygen-output.txt
-    chmod 600 "$AGE_KEY_FILE"
-    MACHINE_KEY_GENERATED=true
-
-    # Extract the public key
-    MACHINE_PUBLIC_KEY=$(grep "public key:" /tmp/age-keygen-output.txt | cut -d: -f2 | xargs)
     rm -f /tmp/age-keygen-output.txt
 
-    log_success "Machine key generated at $AGE_KEY_FILE"
+    log_success "Machine key generated (temporary)"
     log_info "Machine public key: $MACHINE_PUBLIC_KEY"
 
     # Update .sops.yaml with the new machine key
     log_info "Adding machine key to .sops.yaml..."
+    log_info "DEBUG: SOPS_CONFIG=$SOPS_CONFIG"
 
     # Backup
     cp "$SOPS_CONFIG" "$SOPS_CONFIG.bak"
+    log_info "DEBUG: Created backup"
 
     # Check if key already exists
     if grep -q "$MACHINE_PUBLIC_KEY" "$SOPS_CONFIG"; then
         log_warn "Machine key already in .sops.yaml (skipping)"
     else
+        log_info "DEBUG: Key not found, adding it..."
         # Read current age keys, add new one, and write back
         # The age field contains comma-separated keys
         CURRENT_KEYS=$(grep -A 10 "age: >-" "$SOPS_CONFIG" | grep "age1" | tr '\n' ' ' | sed 's/,//g')
@@ -136,39 +187,101 @@ creation_rules:
     age: >-
 EOF
 
-        # Add each key on a new line with proper indentation
-        for key in $ALL_KEYS; do
-            echo "      $key," >> "$SOPS_CONFIG"
+        # Add each key on a new line with proper indentation (remove trailing comma on last key)
+        KEYS_ARRAY=($ALL_KEYS)
+        for i in "${!KEYS_ARRAY[@]}"; do
+            if [ $i -eq $((${#KEYS_ARRAY[@]} - 1)) ]; then
+                # Last key - no comma
+                echo "      ${KEYS_ARRAY[$i]}" >> "$SOPS_CONFIG"
+            else
+                # Not last key - add comma
+                echo "      ${KEYS_ARRAY[$i]}," >> "$SOPS_CONFIG"
+            fi
         done
 
         log_success "Added machine key to .sops.yaml"
     fi
 
+    log_info "DEBUG: About to rekey private.yml"
+
     # Rekey private.yml with the updated .sops.yaml
+    # Need to cd to the config directory so sops can find .sops.yaml
     log_info "Re-encrypting private.yml with updated keys..."
-    if ! SOPS_AGE_KEY_FILE="$BOOTSTRAP_KEY_FILE" sops updatekeys -y "$PRIVATE_CONFIG"; then
+    REKEY_DIR="$(dirname "$SOPS_CONFIG")"
+    ORIGINAL_DIR_FOR_REKEY="$PWD"
+    cd "$REKEY_DIR" || {
+        log_error "Failed to cd to $REKEY_DIR for rekeying"
+        mv "$SOPS_CONFIG.bak" "$SOPS_CONFIG"
+        rm -f "$TEMP_MACHINE_KEY"
+        exit 1
+    }
+
+    if ! SOPS_AGE_KEY_FILE="$BOOTSTRAP_KEY_FILE" nix-shell -p sops --run "sops updatekeys -y private.yml"; then
         log_error "Failed to rekey private.yml"
         log_warn "Restoring backup .sops.yaml"
-        mv "$SOPS_CONFIG.bak" "$SOPS_CONFIG"
+        mv .sops.yaml.bak .sops.yaml
+        cd "$ORIGINAL_DIR_FOR_REKEY"
+        rm -f "$TEMP_MACHINE_KEY"
         exit 1
     fi
+
+    cd "$ORIGINAL_DIR_FOR_REKEY"
     log_success "private.yml re-encrypted with new machine key"
+    log_info "DEBUG: Rekey completed successfully"
+
+    # Verify the new machine key can decrypt
+    log_info "Verifying new machine key can decrypt..."
+    log_info "DEBUG: Using temp key at: $TEMP_MACHINE_KEY"
+    if ! SOPS_AGE_KEY_FILE="$TEMP_MACHINE_KEY" nix-shell -p sops --run "sops -d $PRIVATE_CONFIG" > /dev/null 2>&1; then
+        log_error "New machine key cannot decrypt private.yml even after rekeying!"
+        log_warn "Restoring backup .sops.yaml"
+        mv "$SOPS_CONFIG.bak" "$SOPS_CONFIG"
+        rm -f "$TEMP_MACHINE_KEY"
+        exit 1
+    fi
+    log_success "New machine key verified!"
+    log_info "DEBUG: Verification passed, now saving key permanently"
+
+    # Now that everything worked, save the machine key permanently
+    log_info "Saving machine key to $AGE_KEY_FILE..."
+    mkdir -p "$(dirname "$AGE_KEY_FILE")"
+    log_info "DEBUG: Created directory $(dirname "$AGE_KEY_FILE")"
+    cp "$TEMP_MACHINE_KEY" "$AGE_KEY_FILE"
+    log_info "DEBUG: Copied temp key to permanent location"
+    chmod 600 "$AGE_KEY_FILE"
+    rm -f "$TEMP_MACHINE_KEY"
+    log_success "Machine key saved to $AGE_KEY_FILE"
+    log_info "DEBUG: Key saved successfully"
 
     # Commit and push changes
     log_info "Committing updated .sops.yaml and private.yml to git..."
-    cd "$(dirname "$SOPS_CONFIG")"
+    log_info "DEBUG: Current dir: $PWD"
+    ORIGINAL_DIR="$PWD"
+    log_info "DEBUG: Changing to $(dirname "$SOPS_CONFIG")"
+    cd "$(dirname "$SOPS_CONFIG")" || {
+        log_error "Failed to cd to $(dirname "$SOPS_CONFIG")"
+        exit 1
+    }
+    log_info "DEBUG: Changed to $(pwd)"
 
-    if git diff --quiet .sops.yaml private.yml; then
+    if git diff --quiet .sops.yaml private.yml 2>/dev/null; then
         log_info "No changes to commit (key may already be in .sops.yaml)"
     else
-        git add .sops.yaml private.yml
+        log_info "Adding files to git..."
+        git add .sops.yaml private.yml || {
+            log_warn "Failed to git add files, but continuing..."
+        }
+
         HOSTNAME=$(hostname)
+        log_info "Creating commit..."
         git commit -m "Add Age key for machine: $HOSTNAME
 
 Machine public key: $MACHINE_PUBLIC_KEY
 
 This allows this machine to decrypt the encrypted secrets.
-Generated by home-manager/install.sh" || true
+Generated by home-manager/install.sh" || {
+            log_warn "Git commit failed or nothing to commit, but continuing..."
+        }
 
         log_info "Pushing to remote..."
         if git push; then
@@ -179,19 +292,31 @@ Generated by home-manager/install.sh" || true
         fi
     fi
 
-    cd - > /dev/null
+    cd "$ORIGINAL_DIR" || {
+        log_error "Failed to return to original directory: $ORIGINAL_DIR"
+        log_info "Current directory: $(pwd)"
+        exit 1
+    }
+
+    log_info "Returned to: $(pwd)"
 
     # Clean up bootstrap key
     rm -f "$BOOTSTRAP_KEY_FILE"
     log_success "Bootstrap complete! Machine key is now set up."
+    log_info "DEBUG: Exiting bootstrap workflow, continuing with main script"
     echo ""
 fi
 
+log_info "DEBUG: Past bootstrap workflow check"
+log_info "Continuing with Home Manager installation..."
+
 # Warn if Git credentials might not be set
 log_info "Checking Git credentials in private.yml..."
-if command -v sops &> /dev/null; then
+
+# Check git credentials using nix-shell for sops
+if command -v nix &> /dev/null; then
     # Check if we can decrypt the private config
-    if ! SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" sops -d "$PRIVATE_CONFIG" > /dev/null 2>&1; then
+    if ! SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" nix-shell -p sops --run "sops -d $PRIVATE_CONFIG" > /dev/null 2>&1; then
         log_error "Cannot decrypt $PRIVATE_CONFIG"
         echo ""
         echo "The Age key at $AGE_KEY_FILE is not authorized to decrypt private.yml"
@@ -217,7 +342,7 @@ if command -v sops &> /dev/null; then
     fi
 
     # Try to check if git user name is empty
-    GIT_NAME=$(SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" sops -d "$PRIVATE_CONFIG" 2>/dev/null | grep -A1 "git_user:" | grep "name:" | cut -d'"' -f2)
+    GIT_NAME=$(SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" nix-shell -p sops --run "sops -d $PRIVATE_CONFIG" 2>/dev/null | grep -A1 "git_user:" | grep "name:" | cut -d'"' -f2)
     if [ -z "$GIT_NAME" ] || [ "$GIT_NAME" = "" ]; then
         log_warn "Git user name appears to be empty in private.yml"
         log_info "Edit it with: cd ../bash && ./manage-secrets.sh edit config/private.yml"
@@ -233,9 +358,10 @@ fi
 # Check if Nix is installed
 if ! command -v nix &> /dev/null; then
     log_warn "Nix is not installed. Installing Nix with Determinate Systems installer..."
-    curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
+    curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install --no-confirm
 
     # Source Nix
+    unset __ETC_PROFILE_NIX_SOURCED
     if [ -f "/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh" ]; then
         . "/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh"
     fi
