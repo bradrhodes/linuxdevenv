@@ -2,39 +2,35 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$SCRIPT_DIR"
 
-OUT_FILE="${1:-APP_CATALOG.md}"
-TMP_JSON="$(mktemp)"
-trap 'rm -f "$TMP_JSON"' EXIT
+OUT_FILE="${1:-$REPO_ROOT/APP_CATALOG.yml}"
+TMP_FILE="$(mktemp)"
+trap 'rm -f "$TMP_FILE"' EXIT
 
 nix eval --json .#homeConfigurations.bigb.config.home.packages \
-  --apply 'pkgs: builtins.map (p: { name = (p.pname or p.name); description = (p.meta.description or ""); }) pkgs' \
-  > "$TMP_JSON"
+  --apply '
+    pkgs:
+    let
+      items = builtins.map (p: {
+        name = (p.pname or p.name);
+        description = builtins.replaceStrings ["\n"] [" "] (p.meta.description or "");
+      }) pkgs;
+      sorted = builtins.sort (a: b: a.name < b.name) items;
+    in
+    {
+      meta = {
+        title = "Home Manager App Catalog";
+        source = "home.packages (home-manager/modules/packages.nix)";
+      };
+      packages = sorted;
+    }
+  ' | yq -P > "$TMP_FILE"
 
-python - "$TMP_JSON" <<'PY' > "$OUT_FILE"
-import json
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as f:
-    data = json.load(f)
-
-data.sort(key=lambda x: x.get("name", ""))
-
-lines = []
-lines.append("# Home Manager App Catalog")
-lines.append("")
-lines.append("Generated from `home.packages` in `home-manager/modules/packages.nix`.")
-lines.append("")
-lines.append("| Package | Description |")
-lines.append("| --- | --- |")
-
-for item in data:
-    name = item.get("name", "").strip()
-    desc = (item.get("description") or "").replace("\n", " ").strip()
-    if not desc:
-        desc = "-"
-    lines.append(f"| `{name}` | {desc} |")
-
-sys.stdout.write("\n".join(lines))
-PY
+if [ -f "$OUT_FILE" ] && cmp -s "$TMP_FILE" "$OUT_FILE"; then
+  echo "Catalog unchanged: $OUT_FILE"
+else
+  mv "$TMP_FILE" "$OUT_FILE"
+  echo "Catalog updated: $OUT_FILE"
+fi

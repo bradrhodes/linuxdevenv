@@ -1,0 +1,84 @@
+meta:
+  source: home.packages (home-manager/modules/packages.nix)
+  title: Home Manager App Catalog
+packages:
+  - description: Modern encryption tool with small explicit keys
+    name: age
+  - description: Cat(1) clone with syntax highlighting and Git integration
+    name: bat
+  - description: Tools for manipulating binaries (linker, assembler, etc.) (wrapper script)
+    name: binutils-wrapper
+  - description: Manage your dotfiles across multiple machines, securely
+    name: chezmoi
+  - description: Agentic coding tool that lives in your terminal, understands your codebase, and helps you code faster
+    name: claude-code
+  - description: Embeddable SQL OLAP Database Management System
+    name: duckdb
+  - description: ""
+    name: dummy-xdg-mime-dirs1
+  - description: ""
+    name: dummy-xdg-mime-dirs2
+  - description: Modern, maintained replacement for ls
+    name: eza
+  - description: Smart and user-friendly command line shell
+    name: fish
+  - description: Smart and user-friendly command line shell
+    name: fish
+  - description: Library for font customization and configuration
+    name: fontconfig
+  - description: Command-line fuzzy finder written in Go
+    name: fzf
+  - description: GNU Compiler Collection, version 14.3.0 (wrapper script)
+    name: gcc-wrapper
+  - description: Distributed version control system
+    name: git
+  - description: Distributed version control system
+    name: git
+  - description: Render markdown on the CLI, with pizzazz
+    name: glow
+  - description: Tool to control the generation of non-source files from sources
+    name: gnumake
+  - description: ""
+    name: hm-session-vars.sh
+  - description: ""
+    name: home-configuration-reference-manpage
+  - description: A user environment configurator
+    name: home-manager
+  - description: Interactive process viewer
+    name: htop
+  - description: Simple terminal UI for git commands
+    name: lazygit
+  - description: Implementation of the standard Unix documentation system accessed using the man command
+    name: man-db
+  - description: File Manager and User Shell for the GNU Project, known as Midnight Commander
+    name: mc
+  - description: Disk usage analyzer with an ncurses interface
+    name: ncdu
+  - description: Vim text editor fork focused on extensibility and agility
+    name: neovim
+  - description: Event-driven I/O framework for the V8 JavaScript engine
+    name: nodejs
+  - description: Modern shell written in Rust
+    name: nushell
+  - description: Implementation of the SSH protocol
+    name: openssh
+  - description: Terminal command correction, alternative to thefuck, written in Rust
+    name: pay-respects
+  - description: Modern API client that lives in your terminal
+    name: posting
+  - description: Utility that combines the usability of The Silver Searcher with the raw speed of grep
+    name: ripgrep
+  - description: Database of common MIME types
+    name: shared-mime-info
+  - description: Simple and flexible tool for managing secrets
+    name: sops
+  - description: Minimal, blazing fast, and extremely customizable prompt for any shell
+    name: starship
+  - description: Terminal multiplexer
+    name: tmux
+  - description: Extraction utility for archives compressed in .zip format
+    name: unzip
+  - description: Extremely fast Python package installer and resolver, written in Rust
+    name: uv
+  - description: Portable command-line YAML processor
+    name: yq-go

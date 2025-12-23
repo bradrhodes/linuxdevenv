@@ -2,6 +2,8 @@
 
 A reproducible development environment for Linux and WSL that replaces the old shell-script installer with a declarative [Home Manager](https://nix-community.github.io/home-manager/) + Flakes setup. This repo installs Fish, Tmux, Neovim (LazyVim), Starship, fonts, tooling, and your dotfiles, and keeps them identical across laptops, servers, and VMs.
 
+App catalog: [APP_CATALOG.yml](APP_CATALOG.yml)
+
 ---
 
 ## Repo Layout
@@ -84,7 +86,7 @@ The `bash/manage-secrets.sh` + `bash/age-key-setup.sh` scripts manage SOPS/Age s
 | Neovim settings | `home-manager/modules/neovim.nix` |
 | Activation tasks (fonts/SSH/LazyVim) | `home-manager/modules/activation.nix` |
 | Secrets (git name/email, etc.) | `bash/config/private.yml` via `bash/manage-secrets.sh` |
-| Generate app catalog | `home-manager/catalog.sh` → `home-manager/APP_CATALOG.md` |
+| Generate app catalog | `home-manager/catalog.sh` → `APP_CATALOG.yml` |
 
 ---
 
@@ -108,7 +110,7 @@ As long as every machine points to this repo and runs `home-manager switch`, the
 - **Add an app:** add it to `home-manager/modules/packages.nix` under `home.packages`, then run `home-manager switch --flake .`
 - **Remove an app:** delete it from `home.packages`, then switch again.
 - **Update versions:** run `~/linuxdevenv/home-manager/update.sh`, commit `home-manager/flake.lock`, then switch.
-- **Generate catalog:** run `~/linuxdevenv/home-manager/catalog.sh` to refresh `home-manager/APP_CATALOG.md`.
+- **Generate catalog:** run `~/linuxdevenv/home-manager/catalog.sh` to refresh `APP_CATALOG.yml`.
 
 If a tool has a dedicated Home Manager module (e.g., Fish, Tmux, Git, Starship), prefer editing its file in `home-manager/modules/` instead of adding ad-hoc config elsewhere.
 
