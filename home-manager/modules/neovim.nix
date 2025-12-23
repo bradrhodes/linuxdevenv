@@ -10,4 +10,5 @@
   };
 
   xdg.configFile."nvim/lua/config/options.lua".source = ../dotfiles/nvim/options.lua;
+  xdg.configFile."nvim/lua/plugins/snacks.lua".source = ../dotfiles/nvim/plugins/snacks.lua;
 }
