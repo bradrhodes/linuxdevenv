@@ -19,6 +19,7 @@
     fontconfig
     unzip
     gcc
+    glow
 
     # Command correction tool (was pay-respects in your config)
     pay-respects
