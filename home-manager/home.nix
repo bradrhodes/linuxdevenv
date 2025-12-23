@@ -11,6 +11,8 @@
     ./modules/neovim.nix
     ./modules/starship.nix
     ./modules/activation.nix
+    ./modules/claude-code.nix
+    ./modules/codex.nix
   ];
 
   # ===== HOME MANAGER CONFIGURATION =====
