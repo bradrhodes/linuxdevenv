@@ -139,6 +139,25 @@ To change a dotfile, edit the real file in the repo, run `home-manager switch`, 
    ```
 3. Run `home-manager switch --flake .`
 
+### Adding a New Dotfile Mapping (Recommended)
+
+1. Place the config file in `home-manager/dotfiles/`:
+   - Example: `home-manager/dotfiles/alacritty/alacritty.toml`
+2. Link it into `~/.config/...` in the appropriate module:
+   ```nix
+   # In a module under home-manager/modules/
+   xdg.configFile."alacritty/alacritty.toml".source = ../dotfiles/alacritty/alacritty.toml;
+   ```
+3. Apply the change:
+   ```bash
+   ~/linuxdevenv/home-manager/apply.sh
+   ```
+
+If the file belongs directly in `$HOME` (e.g., `~/.toolrc`), use `home.file` instead:
+```nix
+home.file.".toolrc".source = ../dotfiles/tool/toolrc;
+```
+
 ---
 
 ## Secrets & Sensitive Config
