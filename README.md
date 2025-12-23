@@ -9,7 +9,7 @@ A reproducible development environment for Linux and WSL that replaces the old s
 ```
 linuxdevenv/
 ├── README.md                   # This guide
-├── bash/                       # Legacy scripts (bootstrap + secrets helpers)
+├── bash/                       # Secrets helpers (SOPS/Age)
 └── home-manager/
     ├── flake.nix / home.nix    # Main Home Manager configuration
     ├── modules/                # Fish, tmux, starship, git, packages, etc.
@@ -17,7 +17,7 @@ linuxdevenv/
     └── install.sh              # First-time installer for any machine
 ```
 
-The `bash/manage-secrets.sh` + `bash/age-key-setup.sh` scripts still manage SOPS/Age secrets. Everything else now lives under `home-manager/`.
+The `bash/manage-secrets.sh` + `bash/age-key-setup.sh` scripts manage SOPS/Age secrets. Everything else lives under `home-manager/`.
 
 ---
 
@@ -57,12 +57,12 @@ The `bash/manage-secrets.sh` + `bash/age-key-setup.sh` scripts still manage SOPS
 ## Day-to-Day Workflow (Same Machine)
 
 1. **Edit configuration**
-   - Packages/editors: update `home-manager/home.nix` or module files under `home-manager/modules/`
-   - Dotfiles: edit the plain files in `home-manager/dotfiles/` (Fish snippets, `git/gitconfig`, `tmux/*.conf`, `starship.toml`, etc.)
-2. **Apply changes locally**
+   - Packages/apps: update `home-manager/modules/packages.nix`
+   - Tool settings: update the relevant module in `home-manager/modules/`
+   - Dotfiles: edit the real files in `home-manager/dotfiles/`
+2. **Apply changes**
    ```bash
-   cd ~/linuxdevenv/home-manager
-   home-manager switch --flake .
+   ~/linuxdevenv/home-manager/apply.sh
    ```
 3. **Commit & push** so other machines can pull the same configuration
    ```bash
@@ -71,6 +71,20 @@ The `bash/manage-secrets.sh` + `bash/age-key-setup.sh` scripts still manage SOPS
    git commit -am "Describe change"
    git push
    ```
+
+## Where to Change Things (Quick Reference)
+
+| Task | File(s) |
+|------|---------|
+| Add/remove packages/apps | `home-manager/modules/packages.nix` |
+| Fish plugins/aliases/init | `home-manager/modules/fish.nix`, `home-manager/dotfiles/fish/*` |
+| Tmux settings/plugins | `home-manager/modules/tmux.nix`, `home-manager/dotfiles/tmux/*` |
+| Git config | `home-manager/modules/git.nix`, `home-manager/dotfiles/git/gitconfig` |
+| Starship prompt | `home-manager/modules/starship.nix`, `home-manager/dotfiles/starship.toml` |
+| Neovim settings | `home-manager/modules/neovim.nix` |
+| Activation tasks (fonts/SSH/LazyVim) | `home-manager/modules/activation.nix` |
+| Secrets (git name/email, etc.) | `bash/config/private.yml` via `bash/manage-secrets.sh` |
+| Generate app catalog | `home-manager/catalog.sh` → `home-manager/APP_CATALOG.md` |
 
 ---
 
@@ -91,9 +105,12 @@ As long as every machine points to this repo and runs `home-manager switch`, the
 
 ## Managing Packages & Apps
 
-- **Add an app:** append it to `home.packages` (or the relevant module) and run `home-manager switch --flake .`
-- **Remove an app:** delete it from the list and switch again; Home Manager removes the package/store references automatically.
-- **Update to newer versions:** run `nix flake update` inside `home-manager/`, commit the new `flake.lock`, then `home-manager switch`.
+- **Add an app:** add it to `home-manager/modules/packages.nix` under `home.packages`, then run `home-manager switch --flake .`
+- **Remove an app:** delete it from `home.packages`, then switch again.
+- **Update versions:** run `~/linuxdevenv/home-manager/update.sh`, commit `home-manager/flake.lock`, then switch.
+- **Generate catalog:** run `~/linuxdevenv/home-manager/catalog.sh` to refresh `home-manager/APP_CATALOG.md`.
+
+If a tool has a dedicated Home Manager module (e.g., Fish, Tmux, Git, Starship), prefer editing its file in `home-manager/modules/` instead of adding ad-hoc config elsewhere.
 
 Because the profile is managed declaratively, you no longer need to re-run setup scripts or track per-machine installations.
 
@@ -109,6 +126,16 @@ All managed configs live under `home-manager/dotfiles/` and are symlinked into p
 - `dotfiles/starship.toml` → Starship prompt preset
 
 To change a dotfile, edit the real file in the repo, run `home-manager switch`, and commit/push. No quoting or escaping inside Nix expressions.
+
+### Adding a New Dotfile
+
+1. Add the file under `home-manager/dotfiles/` (e.g., `dotfiles/alacritty/alacritty.toml`)
+2. Wire it into a module using `home.file` or `xdg.configFile`:
+   ```nix
+   # Example in a module
+   xdg.configFile."alacritty/alacritty.toml".source = ../dotfiles/alacritty/alacritty.toml;
+   ```
+3. Run `home-manager switch --flake .`
 
 ---
 

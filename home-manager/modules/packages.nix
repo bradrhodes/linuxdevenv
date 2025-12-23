@@ -38,7 +38,7 @@
     # Additional useful tools
     chezmoi         # Will eventually replace this with HM dotfile management
 
-    # Secrets management (from bootstrap.sh requirements)
+    # Secrets management (legacy install requirements)
     sops            # Mozilla SOPS for secrets encryption
     age             # Modern encryption tool
     yq-go           # YAML processor (Go version, not Python)

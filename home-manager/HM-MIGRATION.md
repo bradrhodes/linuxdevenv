@@ -23,13 +23,13 @@ This document captures the intent, scope, and moving parts of the shift from the
 
 | Old Script | New Home Manager Source | Notes |
 |------------|------------------------|-------|
-| `bash/bootstrap.sh` (pkg install) | `home-manager/modules/packages.nix` | All tooling comes from Nix packages now. |
+| Legacy bootstrap script (removed) | `home-manager/modules/packages.nix` | All tooling comes from Nix packages now. |
 | `bash/scripts/fish-setup.sh` | `modules/fish.nix` + `dotfiles/fish/` | Plugins declared in Nix; init logic lives in real Fish files. |
 | `bash/scripts/tmux-setup.sh` + TPM | `modules/tmux.nix` + `dotfiles/tmux/` | Plugins managed declaratively, no TPM needed. |
 | `bash/scripts/neovim-setup.sh` | `programs.neovim` + activation LazyVim clone | Automatically installs LazyVim starter repo. |
 | `bash/scripts/fonts-setup.sh` | `modules/activation.nix` (installNerdFont) | Downloads EnvyCodeR Nerd Font once. |
-| `bash/scripts/git-setup.sh` | `modules/git.nix` + secrets hook | Git config tracked as a dotfile; user/email pulled from SOPS. |
-| `bash/scripts/ssh-setup.sh` | `activation.nix` (generateSSHKey) | Generates ed25519 key if missing. |
+| Legacy git-setup script (removed) | `modules/git.nix` + secrets hook | Git config tracked as a dotfile; user/email pulled from SOPS. |
+| Legacy ssh-setup script (removed) | `activation.nix` (generateSSHKey) | Generates ed25519 key if missing. |
 | `starship preset` heredoc | `dotfiles/starship.toml` | Native Starship TOML file tracked in git. |
 | Chezmoi templates | `home-manager/dotfiles/` | Home Manager symlinks the files directly. |
 
@@ -37,7 +37,7 @@ This document captures the intent, scope, and moving parts of the shift from the
 
 - **Secrets Workflow** – `bash/manage-secrets.sh` and `bash/age-key-setup.sh` still create/manage Age keys and the encrypted `private.yml`. Home Manager reads the decrypted values during activation but does not replace the existing workflow.
 - **GitHub SSH Upload** – still a manual step; activation shows the public key for you to copy.
-- **Bootstrap Script** – kept for historical purposes, but new machines should use `home-manager/install.sh`.
+- **Bootstrap Script** – removed; new machines should use `home-manager/install.sh`.
 
 ## Operational Flow
 

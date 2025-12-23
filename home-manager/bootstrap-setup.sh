@@ -42,7 +42,7 @@ log_section() {
 if ! command -v age-keygen &> /dev/null; then
     log_error "age-keygen not found. Please install age first:"
     echo "  On Nix: nix profile install nixpkgs#age"
-    echo "  Or run: cd ../bash && ./bootstrap.sh"
+    echo "  Or use your distro package manager"
     exit 1
 fi
 

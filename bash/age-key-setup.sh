@@ -19,11 +19,11 @@ SOPS_CONFIG_FILE="$SCRIPT_DIR/config/.sops.yaml"
 # Check if age is installed
 check_age() {
   if ! command -v age &> /dev/null; then
-    log_fatal "Age is not installed. Please run the bootstrap script first."
+    log_fatal "Age is not installed. Please install it via Nix or your package manager."
   fi
   
   if ! command -v age-keygen &> /dev/null; then
-    log_fatal "Age-keygen is not installed. Please run the bootstrap script first."
+    log_fatal "Age-keygen is not installed. Please install it via Nix or your package manager."
   fi
   
   log_success "Age is installed"

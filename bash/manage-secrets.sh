@@ -40,7 +40,7 @@ validate_yq() {
   else
     log_error "Found Python-based yq instead of required Go-based yq."
     log_error "Please install the Go-based yq from: https://github.com/mikefarah/yq"
-    log_error "Or run: ./bootstrap.sh to install all required tools"
+    log_error "Install required tools (sops, age, yq-go) via Nix or your package manager"
     return 1
   fi
 }

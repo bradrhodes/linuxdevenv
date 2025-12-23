@@ -27,8 +27,7 @@ export LOG_LEVEL_INFO=1
 export LOG_LEVEL_WARN=2
 export LOG_LEVEL_ERROR=3
 
-# Default log level - can be overridden by public.yml configuration
-# LOG_LEVEL will be set by load-config.sh if available
+# Default log level - can be overridden by LOG_LEVEL in the caller's environment
 export CURRENT_LOG_LEVEL=${LOG_LEVEL:-${CURRENT_LOG_LEVEL:-$LOG_LEVEL_INFO}}
 
 # Helper functions

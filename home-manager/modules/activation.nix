@@ -34,7 +34,7 @@
     '';
 
     # Generate SSH key (ed25519) if it doesn't exist
-    # Matches the behavior from bash/scripts/ssh-setup.sh
+    # Matches the behavior from the legacy ssh setup script
     generateSSHKey = config.lib.dag.entryAfter ["writeBoundary"] ''
       SSH_DIR="$HOME/.ssh"
       SSH_KEY="$SSH_DIR/id_ed25519"
