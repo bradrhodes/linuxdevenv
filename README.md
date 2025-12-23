@@ -127,7 +127,7 @@ All managed configs live under `home-manager/dotfiles/` and are symlinked into p
 - `dotfiles/tmux/*.conf` → tmux main config + plugin snippets
 - `dotfiles/starship.toml` → Starship prompt preset
 
-To change a dotfile, edit the real file in the repo, run `home-manager switch`, and commit/push. No quoting or escaping inside Nix expressions.
+To change a dotfile, edit the real file in the repo and run `~/linuxdevenv/home-manager/apply.sh` to refresh the Home Manager symlinks. In this repo workflow, always apply after dotfile changes so the Nix store symlink points at the latest version. Then commit/push.
 
 ### Adding a New Dotfile
 
