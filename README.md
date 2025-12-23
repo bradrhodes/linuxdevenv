@@ -128,30 +128,38 @@ All managed configs live under `home-manager/dotfiles/` and are symlinked into p
 - `dotfiles/starship.toml` → Starship prompt preset
 
 To change a dotfile, edit the real file in the repo and run `~/linuxdevenv/home-manager/apply.sh` to refresh the Home Manager symlinks. In this repo workflow, always apply after dotfile changes so the Nix store symlink points at the latest version. Then commit/push.
+If you already changed the live file under `~/.config/...`, copy/overwrite those changes into `home-manager/dotfiles/...`, then apply, commit, and push. This is needed because Home Manager links from the Nix store, not directly from your working tree.
 
 ### Adding a New Dotfile
 
-1. Add the file under `home-manager/dotfiles/` (e.g., `dotfiles/alacritty/alacritty.toml`)
-2. Wire it into a module using `home.file` or `xdg.configFile`:
+1. Add the file under `home-manager/dotfiles/` (e.g., `dotfiles/alacritty/alacritty.toml`).
+2. Pick the module to wire it in:
+   - If the tool already has a module, add the mapping there (e.g., Fish → `home-manager/modules/fish.nix`).
+   - If it does not, create a new module (e.g., `home-manager/modules/alacritty.nix`) and add it to the imports list in `home-manager/home.nix`.
+3. Add the mapping using `xdg.configFile` (for `~/.config/...`) or `home.file` (for files in `$HOME`):
    ```nix
-   # Example in a module
+   # Example in a module under home-manager/modules/
    xdg.configFile."alacritty/alacritty.toml".source = ../dotfiles/alacritty/alacritty.toml;
    ```
-3. Run `home-manager switch --flake .`
-
-### Adding a New Dotfile Mapping (Recommended)
-
-1. Place the config file in `home-manager/dotfiles/`:
-   - Example: `home-manager/dotfiles/alacritty/alacritty.toml`
-2. Link it into `~/.config/...` in the appropriate module:
-   ```nix
-   # In a module under home-manager/modules/
-   xdg.configFile."alacritty/alacritty.toml".source = ../dotfiles/alacritty/alacritty.toml;
-   ```
-3. Apply the change:
+4. Apply to create/update the symlink:
    ```bash
    ~/linuxdevenv/home-manager/apply.sh
    ```
+
+Example (LazyVim `options.lua`):
+```nix
+# home-manager/home.nix
+imports = [
+  # ...
+  ./modules/neovim-options.nix
+];
+
+# home-manager/modules/neovim-options.nix
+{ config, ... }:
+{
+  xdg.configFile."nvim/lua/config/options.lua".source = ../dotfiles/nvim/lua/config/options.lua;
+}
+```
 
 If the file belongs directly in `$HOME` (e.g., `~/.toolrc`), use `home.file` instead:
 ```nix
