@@ -29,3 +29,19 @@ fzf --fish | source
 function clip
     powershell.exe -command '$input | Set-Clipboard'
 end
+
+function claudesb
+    docker run -it --rm \
+        -v $PWD:/workspace \
+        -v claude-auth:/root/.claude \
+        -w /workspace \
+        local/claude-sb
+end
+
+function codexsb
+    docker run -it --rm \
+        -v $PWD:/workspace \
+        -v codex-auth:/root/.codex \
+        -w /workspace \
+        local/codex-sb
+end
