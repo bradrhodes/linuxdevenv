@@ -118,6 +118,58 @@ Because the profile is managed declaratively, you no longer need to re-run setup
 
 ---
 
+## Sandboxed Claude/Codex Docker Images
+
+This repo also includes Docker images and Fish helpers to run Claude Code and Codex in a sandboxed container against your current project directory.
+
+### Build the sandbox images
+
+From the repo root:
+
+```bash
+cd ~/linuxdevenv/dockerfiles
+./build.sh
+```
+
+This builds:
+- `local/claude-sb`
+- `local/codex-sb`
+
+### Run in the current directory
+
+After applying Home Manager config, Fish provides:
+- `claudesb` (runs `local/claude-sb`)
+- `codexsb` (runs `local/codex-sb`)
+
+Usage from any project directory:
+
+```bash
+cd /path/to/project
+claudesb
+# or
+codexsb
+```
+
+Both commands mount your current folder to `/workspace` in the container and run there.
+
+### Login persistence
+
+On first run (or when login expires), you will be prompted to authenticate inside the container.
+Auth is persisted across container instances via Docker named volumes:
+- `claude-auth` for Claude Code (`/root/.claude`)
+- `codex-auth` for Codex (`/root/.codex`)
+
+So you should not need to log in on every run.
+
+### Troubleshooting
+
+- If `claudesb`/`codexsb` fail with missing image errors, rebuild with `dockerfiles/build.sh`.
+- To reset saved login state, remove the corresponding Docker volume:
+  - `docker volume rm claude-auth`
+  - `docker volume rm codex-auth`
+
+---
+
 ## Dotfile Management
 
 All managed configs live under `home-manager/dotfiles/` and are symlinked into place by Home Manager:
