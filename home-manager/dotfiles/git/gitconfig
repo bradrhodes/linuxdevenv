@@ -1,3 +1,7 @@
+[user]
+	email = 1196817+bradrhodes@users.noreply.github.com
+	name = BR
+
 [include]
   path = ~/.gitconfig.local
 
@@ -28,3 +32,6 @@
   ci = commit
   lg = "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
   aac = !git add --all && git commit -m
+
+[url "git@github.com:"]
+	insteadOf = https://github.com/
